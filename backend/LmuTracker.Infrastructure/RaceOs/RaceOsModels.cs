@@ -63,6 +63,8 @@ public sealed class OverviewResult
 
 public sealed class SplitResult
 {
+    /// <summary>Largada oficial do evento (mesmo horário de configuration.starts).</summary>
+    [JsonPropertyName("date")] public DateTime? Date { get; set; }
     [JsonPropertyName("title")] public string? Title { get; set; }
     [JsonPropertyName("track")] public string? Track { get; set; }
     [JsonPropertyName("trackScene")] public string? TrackScene { get; set; }

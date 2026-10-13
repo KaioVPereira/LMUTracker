@@ -247,15 +247,16 @@ public sealed class ScannerService
         e.TotalSplits = overview.TotalSplits;
         foreach (var (n, result) in results)
         {
-            // O resultado é a fonte final do nome. Se a cena da pista não bate com a guardada, o nome de pista
-            // guardado veio da versão antiga (errada) do scanner: troca pelo do resultado.
+            // O resultado é a fonte final de nome, pista e largada — corrige também as corridas gravadas pela
+            // versão antiga do scanner (que cruzava pelo seriesId e errava os três).
             e.Title = result.Title ?? e.Title;
-            if (!string.IsNullOrEmpty(result.TrackScene) && !string.Equals(e.Scene, result.TrackScene, StringComparison.OrdinalIgnoreCase))
+            var scene = !string.IsNullOrEmpty(result.TrackScene) ? result.TrackScene : result.Track;
+            if (!string.IsNullOrEmpty(scene))
             {
-                e.Scene = result.TrackScene;
-                e.Track = TrackNames.Display(null, result.TrackScene);
+                e.Scene = scene;
+                e.Track = TrackNames.Display(null, scene);
             }
-            e.Track ??= TrackNames.Display(null, result.Track);
+            if (result.Date is { } officialStart) e.EventStartsAt = officialStart.ToUniversalTime();
 
             var split = new RaceSplit { ScanEventId = e.Id, SplitNo = n };
             var bySteam = result.Drivers
