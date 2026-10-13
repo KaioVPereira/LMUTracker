@@ -149,8 +149,11 @@ td.num, th.num { text-align: right; font-family: var(--m); font-variant-numeric:
 .foot { color: var(--faint); font-size: 12.5px; text-align: center; border-top: 1px solid var(--line); padding-top: 18px; }
 
 @media (max-width: 860px) {
-  .auth { grid-template-columns: 1fr; }
-  .auth-hero { border-right: 0; border-bottom: 1px solid var(--line); padding: 28px 16px; }
+  .auth { grid-template-columns: 1fr; min-height: auto; }
+  .auth-hero { border-right: 0; border-bottom: 1px solid var(--line); padding: 24px 16px; justify-content: flex-start; gap: 18px; }
+  .auth-hero h1 { font-size: 28px; }
+  .auth-points { display: none; }
+  .auth-panel { padding: 24px 16px 40px; place-items: start center; }
   .driver, .two { grid-template-columns: 1fr; }
   .tiles { grid-template-columns: repeat(2, 1fr); }
   .user-chip .name { display: none; }
