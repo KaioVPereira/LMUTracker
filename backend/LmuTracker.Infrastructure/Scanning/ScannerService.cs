@@ -75,7 +75,7 @@ public sealed class ScannerService
                 var weekly = 0;
                 foreach (var s in series)
                     foreach (var e in s.Events)
-                        if (await UpsertEventAsync(e, e.Configuration?.Tier?.Name ?? s.Tier ?? kind, kind, ct, s.Title))
+                        if (await UpsertEventAsync(e, e.Configuration?.Tier?.Name ?? s.Tier ?? kind, kind, ct, s.Title, s.Configuration))
                             weekly++;
                 if (_db.ChangeTracker.HasChanges()) await _db.SaveChangesAsync(ct);
                 found += weekly;
@@ -93,16 +93,18 @@ public sealed class ScannerService
 
     /// <summary>Grava (ou atualiza, se ainda pendente) uma corrida descoberta. Devolve true se for nova.</summary>
     private async Task<bool> UpsertEventAsync(
-        RaceOsEvent e, string tier, string defaultType, CancellationToken ct, string? seriesTitle = null)
+        RaceOsEvent e, string tier, string defaultType, CancellationToken ct,
+        string? seriesTitle = null, EventConfiguration? seriesConfig = null)
     {
         if (string.IsNullOrWhiteSpace(e.Id)) return false;
 
         // Nome, largada oficial e pista vêm da configuração de cada corrida (é o que o jogo mostra).
-        var cfg = e.Configuration;
+        // Nas semanais a configuração é da série e a instância só traz a própria largada.
+        var cfg = e.Configuration ?? seriesConfig;
         var track = cfg?.Content?.Track;
         var title = cfg?.Title ?? seriesTitle;
         var trackName = TrackNames.Display(track?.Friendly, track?.Name);
-        var eventStarts = cfg?.Starts?.ToUniversalTime();
+        var eventStarts = (e.Configuration?.Starts ?? e.Starts)?.ToUniversalTime();
 
         // Sem horário de sessão de corrida (comum fora das diárias): fim = largada + duração das sessões,
         // como o jogo calcula. Sem nem isso, não dá para saber quando baixar — ignora.
@@ -269,11 +271,34 @@ public sealed class ScannerService
         _log.LogInformation("Scanner: {Count} corridas salvas sem splits voltaram para a fila.", broken.Count);
     }
 
+    /// <summary>
+    /// Nº de splits pelo event/overview. Semanais: o jogo chama de "weekly", mas a série se declara "specialevent";
+    /// se um não responder, tenta o outro.
+    /// </summary>
+    private async Task<int> GetTotalSplitsAsync(ScanEvent e, CancellationToken ct)
+    {
+        if (e.EventType != "weekly")
+            return (await _raceos.GetOverviewAsync(e.EventType, e.EventId, ct)).TotalSplits;
+
+        Exception? last = null;
+        var best = 0;
+        foreach (var type in new[] { "weekly", "specialevent" })
+        {
+            try
+            {
+                best = Math.Max(best, (await _raceos.GetOverviewAsync(type, e.EventId, ct)).TotalSplits);
+                if (best > 0) return best;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException) { last = ex; }
+        }
+        return best > 0 || last is null ? best : throw last;
+    }
+
     private async Task<FetchOutcome> FetchEventAsync(ScanEvent e, DateTime now, CancellationToken ct)
     {
         // ---- Fase 1: só rede. Nada no banco até termos o que gravar. ----
-        var overview = await _raceos.GetOverviewAsync(e.EventType, e.EventId, ct);
-        var total = Math.Min(overview.TotalSplits, MaxSplits);
+        var reported = await GetTotalSplitsAsync(e, ct);
+        var total = Math.Min(reported, MaxSplits);
 
         if (total <= 0)
         {
@@ -307,7 +332,7 @@ public sealed class ScannerService
         var old = await _db.RaceSplits.Where(s => s.ScanEventId == e.Id).ToListAsync(ct);
         if (old.Count > 0) _db.RaceSplits.RemoveRange(old);
 
-        e.TotalSplits = overview.TotalSplits;
+        e.TotalSplits = reported;
         foreach (var (n, result) in results)
         {
             // O resultado é a fonte final de nome, pista e largada — corrige também as corridas gravadas pela
@@ -391,7 +416,7 @@ public sealed class ScannerService
         e.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
         _log.LogInformation("Scanner: evento {Event} baixado ({Splits} de {Total} splits).",
-            e.EventId, results.Count, overview.TotalSplits);
+            e.EventId, results.Count, reported);
         return FetchOutcome.Fetched;
     }
 

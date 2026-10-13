@@ -22,6 +22,8 @@ public sealed class RaceOsEvent
     [JsonPropertyName("id")] public string Id { get; set; } = null!;
     [JsonPropertyName("seriesId")] public string? SeriesId { get; set; }
     [JsonPropertyName("type")] public string? Type { get; set; }
+    /// <summary>Largada da instância nas semanais/especiais (nas diárias ela vem em configuration.starts).</summary>
+    [JsonPropertyName("starts")] public DateTime? Starts { get; set; }
     [JsonPropertyName("raceStartsAt")] public DateTime? RaceStartsAt { get; set; }
     [JsonPropertyName("raceEndsAt")] public DateTime? RaceEndsAt { get; set; }
     [JsonPropertyName("status")] public string? Status { get; set; }
@@ -60,6 +62,9 @@ public sealed class RaceOsSeries
     /// <summary>Nas séries vem como objeto (<c>{ name, ... }</c>), mas aceitamos texto também.</summary>
     [JsonPropertyName("tier")] public JsonElement? TierRaw { get; set; }
     [JsonPropertyName("type")] public JsonElement? Type { get; set; }
+
+    /// <summary>Nas semanais o título, a pista e as sessões ficam na série; as instâncias só têm id e largada.</summary>
+    [JsonPropertyName("configuration")] public EventConfiguration? Configuration { get; set; }
     [JsonPropertyName("events")] public List<RaceOsEvent> Events { get; set; } = new();
 
     [JsonIgnore]

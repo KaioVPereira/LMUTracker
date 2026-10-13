@@ -124,40 +124,12 @@ public sealed class RaceOsClient
         using var resp = await SendAsync(HttpMethod.Get, $"/api/v1/special-events/{kind}", null, ct);
         if (!resp.IsSuccessStatusCode)
             throw new InvalidOperationException($"special-events/{kind} => HTTP {(int)resp.StatusCode}");
-        var bytes = await resp.Content.ReadAsByteArrayAsync(ct);
-        var series = JsonSerializer.Deserialize<List<RaceOsSeries>>(bytes, Json) ?? new();
-        var instances = series.Sum(x => x.Events.Count);
-        _log.LogInformation("special-events/{Kind}: {Series} séries, {Events} instâncias.", kind, series.Count, instances);
-        // Formato ainda não confirmado: mostra o começo do JSON (só metadados públicos
-        // da agenda) uma vez por processo, para ajustar o modelo.
-        if (series.Count > 0 && _loggedSpecialSample.Add(kind))
-            _log.LogWarning("special-events/{Kind} amostra: {Sample}", kind, DescribeSpecial(bytes));
+        var series = await ReadJsonAsync<List<RaceOsSeries>>(resp, ct) ?? new();
+        _log.LogDebug("special-events/{Kind}: {Series} séries, {Events} instâncias.",
+            kind, series.Count, series.Sum(x => x.Events.Count));
         return series;
     }
 
-    private static readonly HashSet<string> _loggedSpecialSample = new();
-
-    /// <summary>Chaves da série/configuração e as duas primeiras instâncias (sem a lista de carros, que é enorme).</summary>
-    private static string DescribeSpecial(byte[] bytes)
-    {
-        try
-        {
-            using var doc = JsonDocument.Parse(bytes);
-            var first = doc.RootElement[0];
-            var sb = new StringBuilder();
-            sb.Append("serie: ").AppendJoin(',', first.EnumerateObject().Select(p => $"{p.Name}:{p.Value.ValueKind}"));
-            if (first.TryGetProperty("configuration", out var cfg) && cfg.ValueKind == JsonValueKind.Object)
-                foreach (var p in cfg.EnumerateObject().Where(p => p.Name != "content"))
-                    sb.Append(" | cfg.").Append(p.Name).Append('=').Append(Trunc(p.Value.GetRawText(), 600));
-            if (first.TryGetProperty("events", out var evs) && evs.ValueKind == JsonValueKind.Array)
-                foreach (var e in evs.EnumerateArray().Take(2))
-                    sb.Append(" | evento=").Append(Trunc(e.GetRawText(), 1500));
-            return sb.ToString();
-        }
-        catch (Exception ex) { return "falhou: " + ex.Message; }
-    }
-
-    private static string Trunc(string s, int n) => s.Length <= n ? s : s[..n] + "…";
 
     // ---------- Expansão ----------
 
