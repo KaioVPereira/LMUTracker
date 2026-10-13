@@ -45,16 +45,27 @@ public static partial class EventConfigReader
             }
         }
 
-        bool? fixedSetup = null;
-        int? maxPlayers = null;
+        bool? fixedSetup = null, warmers = null;
+        int? maxPlayers = null, damage = null, tireSets = null;
+        double? tyreWear = null, fuel = null;
+        string? limits = null;
         if (cfg.TryGetProperty("settings", out var st) && st.ValueKind == JsonValueKind.Object)
         {
-            if (st.TryGetProperty("fixedSetup", out var fs) && fs.ValueKind is JsonValueKind.True or JsonValueKind.False)
-                fixedSetup = fs.GetBoolean();
+            fixedSetup = Bool(st, "fixedSetup");
+            warmers = Bool(st, "tyreWarmers");
             maxPlayers = Int(st, "maxPlayers");
+            damage = Int(st, "damageMultiplier");
+            tyreWear = Dbl(st, "tyreWearMultiplier");
+            fuel = Dbl(st, "fuelConsumptionMultiplier");
+            // trackLimitsRule: 0 desligado, 1 padrão, 2 rígido, 3 relaxado (mesma tabela do jogo).
+            limits = Str(st, "trackLimitsRule") switch { "0" => "off", "1" => "default", "2" => "strict", "3" => "relaxed", _ => null };
+            if (st.TryGetProperty("tires", out var tires) && tires.ValueKind == JsonValueKind.Object
+                && Bool(tires, "limitedTireSets") == true)
+                tireSets = Int(tires, "availableTires");
         }
 
-        return sessions.Count == 0 && fixedSetup is null ? null : new EventInfoDto(sessions, fixedSetup, maxPlayers);
+        return sessions.Count == 0 && fixedSetup is null ? null
+            : new EventInfoDto(sessions, fixedSetup, maxPlayers, tyreWear, fuel, damage, tireSets, limits, warmers);
     }
 
     private static string? Kind(string? type) => (type ?? "").ToLowerInvariant() switch
@@ -85,6 +96,12 @@ public static partial class EventConfigReader
             JsonValueKind.Number => v.GetRawText(),
             _ => null,
         } : null;
+
+    private static bool? Bool(JsonElement e, string name) =>
+        e.TryGetProperty(name, out var v) && v.ValueKind is JsonValueKind.True or JsonValueKind.False ? v.GetBoolean() : null;
+
+    private static double? Dbl(JsonElement e, string name) =>
+        double.TryParse(Str(e, name), NumberStyles.Float, CultureInfo.InvariantCulture, out var d) ? d : null;
 
     private static int? Int(JsonElement e, string name)
     {

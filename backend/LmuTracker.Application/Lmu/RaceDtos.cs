@@ -16,7 +16,24 @@ public record SplitSummaryDto(int SplitNo, int Drivers, int MostLapsCompleted, s
 public record RaceDetailDto(
     string EventId, string? Title, string? Track, string? Tier, string EventType,
     DateTime StartsAt, DateTime RaceEndsAt, string Status, int? TotalSplits, string? Classes,
-    IReadOnlyList<SplitSummaryDto> Splits);
+    IReadOnlyList<SplitSummaryDto> Splits, EventInfoDto? Info);
+
+/// <summary>Uma volta no gráfico da corrida: posição geral e na classe ao fim da volta, tempo, pit e pneu.</summary>
+public record SplitLapDto(int Lap, int? Position, int? ClassPosition, double? LapTime, double? Elapsed, bool Pit,
+    string? Compound, double? Fuel);
+
+/// <summary>O volta a volta de um piloto no split (para posições, ritmo e estratégia).</summary>
+public record SplitDriverLapsDto(
+    Guid ResultId, Guid? DriverId, string Name, string? CarClass, string? CarNumber, string? Car,
+    int? GridPos, int? ClassGridPos, int? Position, int? ClassPosition, string? FinishStatus, double? BestLap,
+    IReadOnlyList<SplitLapDto> Laps);
+
+public record SplitLapsDto(string EventId, int SplitNo, int MostLaps, IReadOnlyList<SplitDriverLapsDto> Drivers);
+
+/// <summary>Penalidade ou decisão dos comissários no split (tempo em segundos desde o início da sessão).</summary>
+public record SplitEventDto(double? At, string Kind, string? Driver, string? Opponent, string? Detail, int? Lap);
+
+public record SplitEventsDto(string EventId, int SplitNo, bool Available, IReadOnlyList<SplitEventDto> Events);
 
 /// <summary>Linha de classificação de um piloto num split.</summary>
 public record ResultRowDto(
@@ -26,7 +43,7 @@ public record ResultRowDto(
     double? BestLapTime, double? FinishTime, string? FinishStatus, int PitStops,
     int? QualiPosition, int? QualiClassPosition, double? QualiBestLapTime,
     string? DriverRankTitle, int? DriverRankTier, string? SafetyRankTitle, int? SafetyRankTier,
-    int? DriverRankAdjustment, int? SafetyRankAdjustment, bool HasLaps);
+    int? DriverRankAdjustment, int? SafetyRankAdjustment, bool HasLaps, int? Incidents, int? Penalties);
 
 public record SplitResultsDto(string EventId, int SplitNo, IReadOnlyList<ResultRowDto> Rows);
 

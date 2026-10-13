@@ -31,6 +31,12 @@ export interface EventInfo {
   sessions: SessionInfo[]
   fixedSetup: boolean | null
   maxPlayers: number | null
+  tyreWear?: number | null
+  fuelUse?: number | null
+  damage?: number | null
+  tireSets?: number | null
+  trackLimits?: 'off' | 'default' | 'strict' | 'relaxed' | null
+  tyreWarmers?: boolean | null
 }
 
 export interface UpcomingRace {
@@ -147,6 +153,7 @@ export interface RaceDetail {
   totalSplits: number | null
   classes: string | null
   splits: SplitSummary[]
+  info: EventInfo | null
 }
 
 export interface ResultRow {
@@ -178,6 +185,8 @@ export interface ResultRow {
   driverRankAdjustment: number | null
   safetyRankAdjustment: number | null
   hasLaps: boolean
+  incidents: number | null
+  penalties: number | null
 }
 
 export interface SplitResults {
@@ -510,3 +519,45 @@ export interface HeadToHead {
   avgBestLapGap: number | null
   races: HeadToHeadRace[]
 }
+
+// ---------- detalhe da corrida ----------
+
+export interface SplitLap {
+  lap: number
+  position: number | null
+  classPosition: number | null
+  lapTime: number | null
+  elapsed: number | null
+  pit: boolean
+  compound: string | null
+  fuel: number | null
+}
+
+export interface SplitDriverLaps {
+  resultId: string
+  driverId: string | null
+  name: string
+  carClass: string | null
+  carNumber: string | null
+  car: string | null
+  gridPos: number | null
+  classGridPos: number | null
+  position: number | null
+  classPosition: number | null
+  finishStatus: string | null
+  bestLap: number | null
+  laps: SplitLap[]
+}
+
+export interface SplitLaps { eventId: string; splitNo: number; mostLaps: number; drivers: SplitDriverLaps[] }
+
+export interface SplitEvent {
+  at: number | null
+  kind: 'penalty' | 'served' | 'steward' | string
+  driver: string | null
+  opponent: string | null
+  detail: string | null
+  lap: number | null
+}
+
+export interface SplitEvents { eventId: string; splitNo: number; available: boolean; events: SplitEvent[] }

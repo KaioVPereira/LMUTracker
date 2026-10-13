@@ -5,7 +5,10 @@ public record SessionInfoDto(
     string Kind, double Minutes, double WaitMinutes, double TimeOfDay, int? Sky, int? TemperatureC, int? RainChance);
 
 /// <summary>O que a configuração do evento diz (só existe para corridas vistas na agenda a partir do scanner v3).</summary>
-public record EventInfoDto(IReadOnlyList<SessionInfoDto> Sessions, bool? FixedSetup, int? MaxPlayers);
+public record EventInfoDto(
+    IReadOnlyList<SessionInfoDto> Sessions, bool? FixedSetup, int? MaxPlayers,
+    double? TyreWear = null, double? FuelUse = null, int? Damage = null, int? TireSets = null,
+    string? TrackLimits = null, bool? TyreWarmers = null);
 
 /// <summary>Corrida da agenda que ainda vai acontecer (ou está acontecendo).</summary>
 public record UpcomingRaceDto(

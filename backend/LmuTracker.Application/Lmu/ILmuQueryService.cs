@@ -10,7 +10,10 @@ public interface ILmuQueryService
     /// nome exibido da pista e <paramref name="car"/> o modelo (CarType) que alguém usou na corrida.
     /// </summary>
     Task<PagedDto<RaceListItemDto>> ListRacesAsync(
-        string? tier, string? track, string? car, int page, CancellationToken ct = default);
+        string? tier, string? track, string? car, int page, CancellationToken ct = default,
+        string? carClass = null, DateTime? from = null, DateTime? to = null);
+    Task<SplitLapsDto?> GetSplitLapsAsync(string eventId, int splitNo, CancellationToken ct = default);
+    Task<SplitEventsDto?> GetSplitEventsAsync(string eventId, int splitNo, CancellationToken ct = default);
     Task<RaceDetailDto?> GetRaceAsync(string eventId, CancellationToken ct = default);
     Task<SplitResultsDto?> GetSplitAsync(string eventId, int splitNo, CancellationToken ct = default);
     Task<ResultDetailDto?> GetResultAsync(Guid resultId, CancellationToken ct = default);

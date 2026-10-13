@@ -264,6 +264,7 @@ function Hero({ race, live, liveCount }: { race: UpcomingRace; live: boolean; li
         <div className="hero-clock" aria-live="off"><b>{fmtClock(clock.value)}</b>{clock.label}</div>
         <Phases race={race} now={now} />
       </div>
+      <div className="hero-side">
       <dl className="hero-facts">
         <div><dt>Nível</dt><dd><TierChip tier={race.tier} /></dd></div>
         {s && <div><dt>Hora no jogo</dt><dd className="mono">{fmtGameTime(s.timeOfDay)}</dd></div>}
@@ -273,6 +274,7 @@ function Hero({ race, live, liveCount }: { race: UpcomingRace; live: boolean; li
         {race.info?.maxPlayers && <div><dt>Grid por split</dt><dd className="mono">até {race.info.maxPlayers}</dd></div>}
         <div className="fact-end"><dt>Termina</dt><dd className="mono">~{fmtTime(race.endsAt)}</dd></div>
       </dl>
+      </div>
     </article>
   )
 }

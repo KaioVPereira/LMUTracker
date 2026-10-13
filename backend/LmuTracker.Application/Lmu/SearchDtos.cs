@@ -23,4 +23,7 @@ public interface ISearchService
 {
     /// <summary>Até alguns itens por grupo. Termos com menos de 2 letras devolvem tudo vazio.</summary>
     Task<SearchResultsDto> SearchAsync(string? query, CancellationToken ct = default);
+
+    /// <summary>Pistas com corrida guardada (para filtros), da mais corrida para a menos.</summary>
+    Task<IReadOnlyList<SearchTrackDto>> ListTracksAsync(CancellationToken ct = default);
 }

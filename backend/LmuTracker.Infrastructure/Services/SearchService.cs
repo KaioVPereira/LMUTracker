@@ -96,6 +96,9 @@ public sealed class SearchService : ISearchService
             .ToList();
     }
 
+    public async Task<IReadOnlyList<SearchTrackDto>> ListTracksAsync(CancellationToken ct = default) =>
+        (await TracksAsync(ct)).OrderByDescending(t => t.Races).ThenBy(t => t.Track).ToList();
+
     private Task<List<SearchTrackDto>> TracksAsync(CancellationToken ct) =>
         _cache.GetOrCreateAsync("search:tracks", async entry =>
         {

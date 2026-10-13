@@ -108,7 +108,8 @@ public sealed class LmuQueryService : ILmuQueryService
     // ---------------------------------------------------------------- corridas
 
     public async Task<PagedDto<RaceListItemDto>> ListRacesAsync(
-        string? tier, string? track, string? car, int page, CancellationToken ct = default)
+        string? tier, string? track, string? car, int page, CancellationToken ct = default,
+        string? carClass = null, DateTime? from = null, DateTime? to = null)
     {
         page = Math.Max(1, page);
         // Corrida com resultado gravado aparece mesmo se voltou à fila para ser baixada de novo (reprocessamento):
@@ -118,6 +119,21 @@ public sealed class LmuQueryService : ILmuQueryService
         else if (!string.IsNullOrWhiteSpace(tier)) q = q.Where(e => e.Tier == tier);
         if (!string.IsNullOrWhiteSpace(track)) q = q.Where(e => e.Track == track);
         if (!string.IsNullOrWhiteSpace(car)) q = q.Where(e => e.Splits.Any(s => s.Results.Any(r => r.CarType == car)));
+        // Classe: as variantes do RaceOS (LMP2 / LMP2_ELMS, GT3 / LMGT3) contam como a mesma.
+        if (!string.IsNullOrWhiteSpace(carClass))
+        {
+            var cls = carClass.ToUpperInvariant();
+            q = cls switch
+            {
+                "HYPER" => q.Where(e => e.Classes!.Contains("Hyper")),
+                "LMP2" => q.Where(e => e.Classes!.Contains("LMP2")),
+                "LMP3" => q.Where(e => e.Classes!.Contains("LMP3")),
+                "GT3" => q.Where(e => e.Classes!.Contains("GT3")),
+                _ => q.Where(e => e.Classes!.Contains(carClass)),
+            };
+        }
+        if (from is { } f) q = q.Where(e => (e.EventStartsAt ?? e.RaceStartsAt) >= f);
+        if (to is { } t) q = q.Where(e => (e.EventStartsAt ?? e.RaceStartsAt) < t);
 
         var total = await q.CountAsync(ct);
         var items = await q
@@ -147,7 +163,8 @@ public sealed class LmuQueryService : ILmuQueryService
             .ToListAsync(ct);
 
         return new RaceDetailDto(e.EventId, e.Title, e.Track, e.Tier, e.EventType,
-            e.EventStartsAt ?? e.RaceStartsAt, e.RaceEndsAt, e.Status.ToString(), e.TotalSplits, e.Classes, splits);
+            e.EventStartsAt ?? e.RaceStartsAt, e.RaceEndsAt, e.Status.ToString(), e.TotalSplits, e.Classes, splits,
+            EventConfigReader.Read(e.ConfigData));
     }
 
     public async Task<SplitResultsDto?> GetSplitAsync(string eventId, int splitNo, CancellationToken ct = default)
@@ -189,6 +206,71 @@ public sealed class LmuQueryService : ILmuQueryService
         var e = info.Event;
         return new ResultDetailDto(e.EventId, e.Title, e.Track, e.Tier, e.EventType, e.EventStartsAt ?? e.RaceStartsAt,
             info.SplitNo, info.DriverCount, classFastest, row, LapCodec.Decode(info.LapsData));
+    }
+
+    /// <summary>
+    /// Volta a volta de todo o split: posição geral (do RaceOS) e na classe (a ordem das posições gerais dentro da
+    /// classe, entre os carros que completaram aquela volta).
+    /// </summary>
+    public async Task<SplitLapsDto?> GetSplitLapsAsync(string eventId, int splitNo, CancellationToken ct = default)
+    {
+        var split = await _db.RaceSplits.AsNoTracking()
+            .Where(s => s.ScanEvent.EventId == eventId && s.SplitNo == splitNo)
+            .Select(s => new { s.Id, s.MostLapsCompleted })
+            .FirstOrDefaultAsync(ct);
+        if (split is null) return null;
+
+        var rows = await (
+                from r in _db.RaceResults.AsNoTracking()
+                where r.RaceSplitId == split.Id
+                join drv in _db.Drivers on r.SteamId equals drv.SteamId into dj
+                from drv in dj.DefaultIfEmpty()
+                select new
+                {
+                    r.Id, DriverId = drv == null ? (Guid?)null : drv.Id, r.Name, r.CarClass, r.CarNumber, r.CarType,
+                    r.GridPos, r.ClassGridPos, r.Position, r.ClassPosition, r.FinishStatus, r.BestLapTime, r.LapsData,
+                })
+            .ToListAsync(ct);
+
+        var decoded = rows.Select(r => (Row: r, Laps: LapCodec.Decode(r.LapsData))).ToList();
+
+        // Posição na classe por volta: a ordem, dentro da classe, das posições gerais que o RaceOS dá para aquela
+        // volta (o tempo acumulado "et" não serve na largada: não marca o fim da 1ª volta igual para todos).
+        var classPos = new Dictionary<(Guid, int), int>();
+        foreach (var byClass in decoded.GroupBy(d => d.Row.CarClass ?? ""))
+        {
+            var lapsByNumber = byClass
+                .SelectMany(d => d.Laps.Where(l => l.Position is not null).Select(l => (d.Row.Id, l.Lap, Value: (double)l.Position!.Value)))
+                .GroupBy(x => x.Lap);
+            foreach (var lap in lapsByNumber)
+            {
+                var k = 1;
+                foreach (var x in lap.OrderBy(x => x.Value)) classPos[(x.Id, lap.Key)] = k++;
+            }
+        }
+
+        var drivers = decoded
+            .OrderBy(d => d.Row.Position ?? int.MaxValue).ThenBy(d => d.Row.Name)
+            .Select(d => new SplitDriverLapsDto(
+                d.Row.Id, d.Row.DriverId, d.Row.Name, d.Row.CarClass, d.Row.CarNumber, d.Row.CarType,
+                d.Row.GridPos, d.Row.ClassGridPos, d.Row.Position, d.Row.ClassPosition, d.Row.FinishStatus, d.Row.BestLapTime,
+                d.Laps.Select(l => new SplitLapDto(l.Lap, l.Position,
+                    classPos.TryGetValue((d.Row.Id, l.Lap), out var cp) ? cp : null,
+                    l.LapTime, l.Elapsed, l.Pit, l.RearCompound ?? l.FrontCompound, l.Fuel)).ToList()))
+            .ToList();
+        return new SplitLapsDto(eventId, splitNo, split.MostLapsCompleted, drivers);
+    }
+
+    /// <summary>Penalidades e decisões dos comissários do split, do resultado cru (só corridas a partir do scanner v3).</summary>
+    public async Task<SplitEventsDto?> GetSplitEventsAsync(string eventId, int splitNo, CancellationToken ct = default)
+    {
+        var split = await _db.RaceSplits.AsNoTracking()
+            .Where(s => s.ScanEvent.EventId == eventId && s.SplitNo == splitNo)
+            .Select(s => new { s.ExtraData })
+            .FirstOrDefaultAsync(ct);
+        if (split is null) return null;
+        var events = SplitEventsReader.Read(split.ExtraData);
+        return new SplitEventsDto(eventId, splitNo, events is not null, events ?? []);
     }
 
     // ---------------------------------------------------------------- pilotos
@@ -252,5 +334,5 @@ public sealed class LmuQueryService : ILmuQueryService
             r.BestLapTime, r.FinishTime, r.FinishStatus, r.PitStops,
             r.QualiPosition, r.QualiClassPosition, r.QualiBestLapTime,
             r.DriverRankTitle, r.DriverRankTier, r.SafetyRankTitle, r.SafetyRankTier,
-            r.DriverRankAdjustment, r.SafetyRankAdjustment, r.LapsData != null);
+            r.DriverRankAdjustment, r.SafetyRankAdjustment, r.LapsData != null, r.Incidents, r.Penalties);
 }
