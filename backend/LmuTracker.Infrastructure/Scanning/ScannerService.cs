@@ -39,6 +39,20 @@ public sealed class ScannerService
 
     public async Task DiscoverAsync(CancellationToken ct)
     {
+        // A lista de corridas não traz nome nem pista; a agenda traz, por série. Falhar aqui não pode
+        // impedir a descoberta (o que importa é guardar o eventId), então só registra e segue sem título.
+        var series = new Dictionary<string, ScheduleSeries>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            var schedule = await _raceos.GetScheduleAsync(ct);
+            foreach (var s in schedule?.Tiers.Values.SelectMany(v => v) ?? Enumerable.Empty<ScheduleSeries>())
+                if (!string.IsNullOrEmpty(s.SeriesId)) series[s.SeriesId] = s;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _log.LogWarning(ex, "Scanner: agenda indisponível; corridas novas ficam sem título por enquanto.");
+        }
+
         var found = 0;
         foreach (var tier in Tiers)
         {
@@ -46,6 +60,7 @@ public sealed class ScannerService
             foreach (var e in events)
             {
                 if (string.IsNullOrWhiteSpace(e.Id)) continue;
+                series.TryGetValue(e.SeriesId ?? "", out var info);
 
                 var existing = await _db.ScanEvents.FirstOrDefaultAsync(x => x.EventId == e.Id, ct);
                 if (existing is null)
@@ -54,7 +69,9 @@ public sealed class ScannerService
                     {
                         EventId = e.Id,
                         SeriesId = e.SeriesId ?? "",
-                        Title = e.Title,
+                        Title = e.Title ?? info?.EventName,
+                        Track = info?.Track,
+                        Scene = info?.Scene,
                         EventType = e.Type ?? "daily",
                         Tier = tier,
                         RaceStartsAt = (e.RaceStartsAt ?? DateTime.UtcNow).ToUniversalTime(),
@@ -69,6 +86,9 @@ public sealed class ScannerService
                     // Ainda não baixado: mantém horários/estado atualizados enquanto espera terminar.
                     existing.RaceOsStatus = e.Status;
                     if (e.RaceEndsAt is { } ends) existing.RaceEndsAt = ends.ToUniversalTime();
+                    existing.Title ??= info?.EventName;
+                    existing.Track ??= info?.Track;
+                    existing.Scene ??= info?.Scene;
                     existing.UpdatedAt = DateTime.UtcNow;
                 }
             }

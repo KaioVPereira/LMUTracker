@@ -104,6 +104,18 @@ public sealed class RaceOsClient
         return await resp.Content.ReadFromJsonAsync<List<RaceOsEvent>>(Json, ct) ?? new();
     }
 
+    /// <summary>Agenda por tier: nome da série, pista e cena. Usada para dar título às corridas descobertas.</summary>
+    public async Task<ScheduleResult?> GetScheduleAsync(CancellationToken ct)
+    {
+        using var resp = await SendAsync(HttpMethod.Get, "/api/v1/daily/schedule", null, ct);
+        if (!resp.IsSuccessStatusCode)
+        {
+            _log.LogWarning("daily/schedule => HTTP {Code}", (int)resp.StatusCode);
+            return null;
+        }
+        return await resp.Content.ReadFromJsonAsync<ScheduleResult>(Json, ct);
+    }
+
     // ---------- Expansão ----------
 
     /// <summary>Metadados do evento, inclusive <c>totalSplits</c>.</summary>

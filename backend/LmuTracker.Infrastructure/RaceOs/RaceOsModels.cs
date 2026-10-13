@@ -23,6 +23,22 @@ public sealed class RaceOsEvent
     [JsonPropertyName("status")] public string? Status { get; set; }
 }
 
+// ----- Agenda (daily/schedule): uma série por tier, com nome, pista e horários -----
+
+public sealed class ScheduleResult
+{
+    [JsonPropertyName("tiers")] public Dictionary<string, List<ScheduleSeries>> Tiers { get; set; } = new();
+}
+
+public sealed class ScheduleSeries
+{
+    [JsonPropertyName("seriesid")] public string? SeriesId { get; set; }
+    [JsonPropertyName("eventname")] public string? EventName { get; set; }
+    [JsonPropertyName("track")] public string? Track { get; set; }
+    [JsonPropertyName("scene")] public string? Scene { get; set; }
+    [JsonPropertyName("duration")] public string? Duration { get; set; }
+}
+
 public sealed class OverviewResult
 {
     [JsonPropertyName("totalSplits")] public int TotalSplits { get; set; }

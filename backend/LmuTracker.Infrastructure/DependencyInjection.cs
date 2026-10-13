@@ -1,4 +1,5 @@
 using LmuTracker.Application.Auth;
+using LmuTracker.Application.Lmu;
 using LmuTracker.Infrastructure.Auth;
 using LmuTracker.Infrastructure.Persistence;
 using LmuTracker.Infrastructure.RaceOs;
@@ -21,6 +22,7 @@ public static class DependencyInjection
         services.Configure<JwtOptions>(config.GetSection(JwtOptions.Section));
         services.AddSingleton<ITokenService, TokenService>();
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<ILmuQueryService, LmuQueryService>();
 
         services.Configure<RaceOsOptions>(config.GetSection(RaceOsOptions.Section));
         services.Configure<SteamKitOptions>(config.GetSection(SteamKitOptions.Section));
