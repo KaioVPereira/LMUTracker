@@ -18,6 +18,7 @@ appsettings.Production.json
 *.secret.json
 .env
 .env.*
+!.env.example
 
 # ---- Banco local / dumps ----
 *.mdf
