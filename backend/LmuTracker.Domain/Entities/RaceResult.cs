@@ -63,6 +63,14 @@ public class RaceResult : Entity
     // ---------- Volta a volta ----------
     public int PitStops { get; set; }
 
+    // ---------- Incidentes (do stream da corrida; null = corrida sem o resultado cru guardado) ----------
+
+    /// <summary>Contatos relatados pelo piloto (com carro ou muro), como o jogo conta.</summary>
+    public int? Incidents { get; set; }
+
+    /// <summary>Penalidades recebidas na corrida.</summary>
+    public int? Penalties { get; set; }
+
     /// <summary>
     /// Voltas da corrida (tempo, setores, posição, combustível, pneus, desgaste, pit) em JSON compacto
     /// comprimido com gzip — ~1 KB por piloto. Ver LapCodec. Null em resultados gravados antes disso.

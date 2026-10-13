@@ -33,6 +33,19 @@ if (args.Contains("steam-login"))
     return;
 }
 
+// Conta incidentes e penalidades do resultado cru já guardado (sem falar com o RaceOS) e sai.
+if (args.Contains("backfill-incidents"))
+{
+    using var hostB = builder.Build();
+    using var scopeB = hostB.Services.CreateScope();
+    var scanner = scopeB.ServiceProvider.GetRequiredService<LmuTracker.Infrastructure.Scanning.ScannerService>();
+    var total = 0;
+    int n;
+    while ((n = await scanner.BackfillIncidentsAsync(CancellationToken.None)) > 0) total += n;
+    Console.WriteLine($"Splits com incidentes contados: {total}");
+    return;
+}
+
 // Modo de status: `dotnet run -- report` imprime um resumo do que já foi guardado e sai.
 if (args.Contains("report"))
 {

@@ -136,6 +136,9 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
                     b.Property<int?>("GridPos")
                         .HasColumnType("int");
 
+                    b.Property<int?>("Incidents")
+                        .HasColumnType("int");
+
                     b.Property<bool>("JokerPlayed")
                         .HasColumnType("bit");
 
@@ -152,6 +155,9 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("Nationality")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<int?>("Penalties")
+                        .HasColumnType("int");
 
                     b.Property<int>("PitStops")
                         .HasColumnType("int");

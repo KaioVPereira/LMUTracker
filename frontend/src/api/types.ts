@@ -372,3 +372,141 @@ export interface Home {
   classShare: ClassShare[]
   generatedAt: string
 }
+
+// ---------- perfil: estatísticas e comparação ----------
+
+/** Rank numa escala contínua: Bronze 1 = 0…100, Bronze 2 = 100…200, Bronze 3 = 200…300, Silver 1 = 300… */
+export interface RankPoint {
+  at: string
+  eventId: string
+  title: string | null
+  track: string | null
+  driverRankTitle: string | null
+  driverRankTier: number | null
+  driverRankProgress: number | null
+  driverScore: number | null
+  driverRankAdjustment: number | null
+  safetyRankTitle: string | null
+  safetyRankTier: number | null
+  safetyRankProgress: number | null
+  safetyScore: number | null
+  safetyRankAdjustment: number | null
+}
+
+export interface ProfileSummary {
+  races: number
+  wins: number
+  podiums: number
+  top5: number
+  poles: number
+  dnfs: number
+  finished: number
+  avgPositionsGained: number | null
+  avgClassFinish: number | null
+  avgQualiClassPosition: number | null
+  racesWithIncidents: number
+  incidentsPerRace: number | null
+  penalties: number
+  cleanRaces: number
+  lapsCompleted: number
+  /** Variação típica do ritmo numa corrida, em % (menor = mais constante). */
+  paceConsistency: number | null
+  topSplitRaces: number
+}
+
+export interface TrackStat {
+  track: string
+  carClass: string | null
+  races: number
+  wins: number
+  podiums: number
+  avgClassFinish: number | null
+  bestClassFinish: number | null
+  bestLap: number | null
+  incidentsPerRace: number | null
+}
+
+export interface CarStat {
+  car: string
+  carClass: string | null
+  races: number
+  wins: number
+  podiums: number
+  dnfs: number
+  avgClassFinish: number | null
+  bestClassFinish: number | null
+}
+
+export interface Rival {
+  driverId: string | null
+  name: string
+  nationality: string | null
+  sharedRaces: number
+  aheadOfThem: number
+  behindThem: number
+  lastRaced: string
+}
+
+export interface Achievement {
+  key: string
+  title: string
+  description: string
+  achieved: boolean
+  at: string | null
+  eventId: string | null
+  progress: number | null
+  goal: number | null
+}
+
+export interface DriverProfileStats {
+  driverId: string
+  summary: ProfileSummary
+  rankHistory: RankPoint[]
+  tracks: TrackStat[]
+  cars: CarStat[]
+  rivals: Rival[]
+  achievements: Achievement[]
+  generatedAt: string
+}
+
+export interface HeadToHeadSide {
+  driverId: string
+  name: string
+  nationality: string | null
+  driverRankTitle: string | null
+  driverRankTier: number | null
+  safetyRankTitle: string | null
+  safetyRankTier: number | null
+  races: number
+  wins: number
+  podiums: number
+}
+
+export interface HeadToHeadRace {
+  eventId: string
+  title: string | null
+  track: string | null
+  startsAt: string
+  splitNo: number
+  myClass: string | null
+  myPosition: number | null
+  myClassPosition: number | null
+  myBestLap: number | null
+  myStatus: string | null
+  theirClass: string | null
+  theirPosition: number | null
+  theirClassPosition: number | null
+  theirBestLap: number | null
+  theirStatus: string | null
+}
+
+export interface HeadToHead {
+  me: HeadToHeadSide
+  them: HeadToHeadSide
+  shared: number
+  meAhead: number
+  themAhead: number
+  sameClassRaces: number
+  avgBestLapGap: number | null
+  races: HeadToHeadRace[]
+}

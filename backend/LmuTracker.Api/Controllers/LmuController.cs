@@ -11,13 +11,25 @@ public class LmuController : ApiControllerBase
     private readonly ILmuQueryService _lmu;
     private readonly ISearchService _search;
     private readonly IHomeService _home;
+    private readonly IDriverStatsService _stats;
 
-    public LmuController(ILmuQueryService lmu, ISearchService search, IHomeService home)
+    public LmuController(ILmuQueryService lmu, ISearchService search, IHomeService home, IDriverStatsService stats)
     {
         _lmu = lmu;
         _search = search;
         _home = home;
+        _stats = stats;
     }
+
+    /// <summary>Estatísticas do perfil: resumo, evolução do rank, pistas, carros, rivais e conquistas.</summary>
+    [HttpGet("drivers/{driverId:guid}/stats")]
+    public async Task<ActionResult<DriverProfileStatsDto>> DriverStats(Guid driverId, CancellationToken ct)
+        => await _stats.GetAsync(driverId, ct) is { } s ? Ok(s) : NotFound();
+
+    /// <summary>Comparação direta: as corridas que os dois disputaram no mesmo split.</summary>
+    [HttpGet("drivers/{driverId:guid}/vs/{otherId:guid}")]
+    public async Task<ActionResult<HeadToHeadDto>> HeadToHead(Guid driverId, Guid otherId, CancellationToken ct)
+        => await _stats.HeadToHeadAsync(driverId, otherId, ct) is { } h ? Ok(h) : NotFound();
 
     /// <summary>Destaques da tela inicial (recordes, vencedores, saldo de DR, chegadas apertadas). Cache de 60 s.</summary>
     [HttpGet("home")]

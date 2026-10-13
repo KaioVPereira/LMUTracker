@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using LmuTracker.Domain.Entities;
 using LmuTracker.Infrastructure.Persistence;
 using LmuTracker.Infrastructure.RaceOs;
@@ -58,6 +59,36 @@ public sealed class ScannerService
     {
         await DiscoverAsync(ct);
         await FetchDueAsync(ct);
+        await BackfillIncidentsAsync(ct);
+    }
+
+    /// <summary>
+    /// Incidentes e penalidades das corridas baixadas antes de existir a contagem: saem do resultado cru que já está
+    /// guardado (RaceSplit.ExtraData), sem baixar nada de novo. Uns splits por passada.
+    /// </summary>
+    public async Task<int> BackfillIncidentsAsync(CancellationToken ct)
+    {
+        var splits = await _db.RaceSplits
+            .Where(s => s.ExtraData != null && s.Results.Any(r => r.Incidents == null))
+            .OrderByDescending(s => s.CreatedAt)
+            .Take(100)
+            .Include(s => s.Results)
+            .ToListAsync(ct);
+        if (splits.Count == 0) return 0;
+
+        foreach (var s in splits)
+        {
+            var counts = IncidentParser.CountFromStored(s.ExtraData, s.Results.Select(r => r.Name).Distinct().ToList());
+            foreach (var r in s.Results)
+            {
+                var c = counts?.GetValueOrDefault(r.Name);
+                r.Incidents = c?.Incidents ?? 0;
+                r.Penalties = c?.Penalties ?? 0;
+            }
+        }
+        await _db.SaveChangesAsync(ct);
+        _log.LogInformation("Scanner: incidentes contados em {Count} splits já guardados.", splits.Count);
+        return splits.Count;
     }
 
     // ---------- 1) Descoberta: agenda -> ScanEvents ----------
@@ -390,9 +421,15 @@ public sealed class ScannerService
                 .GroupBy(q => q.SteamId!)
                 .ToDictionary(g => g.Key, g => g.First());
 
+            // Incidentes e penalidades por nome, do stream da corrida (o stream não traz SteamID).
+            JsonElement? streams = null;
+            if (rows?.Extra is { } rx && rx.TryGetValue("streams", out var st)) streams = st;
+            var incidents = IncidentParser.Count(streams, (rows?.Results ?? new()).Select(x => x.Name ?? "").Distinct().ToList());
+
             foreach (var r in rows?.Results ?? new())
             {
                 bySteam.TryGetValue(r.SteamId ?? "", out var meta);
+                var inc = incidents.GetValueOrDefault(r.Name ?? "");
                 quali.TryGetValue(r.SteamId ?? "", out var q);
                 var laps = ToLaps(r.LapList);
                 if (!string.IsNullOrWhiteSpace(r.CarClass)) classes.Add(r.CarClass);
@@ -409,6 +446,8 @@ public sealed class ScannerService
                     QualiClassPosition = ParseInt(q?.ClassPosition),
                     QualiBestLapTime = ParseDouble(q?.BestLapTime),
                     PitStops = laps.Count(l => l.Pit),
+                    Incidents = inc?.Incidents ?? 0,
+                    Penalties = inc?.Penalties ?? 0,
                     LapsData = LapCodec.Encode(laps),
                     ExtraData = rowExtra is null ? null : JsonBlob.Encode(rowExtra, MaxRowExtraBytes),
                     // Piloto fora do array drivers chega com SteamId "" — vazio vira null para não juntar todos num só.

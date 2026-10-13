@@ -28,6 +28,7 @@ public static class DependencyInjection
         services.AddMemoryCache();
         services.AddScoped<ISearchService, SearchService>();
         services.AddScoped<IHomeService, HomeService>();
+        services.AddScoped<IDriverStatsService, DriverStatsService>();
 
         // ---- Vínculo Steam (OpenID) ----
         services.Configure<SiteOptions>(config.GetSection(SiteOptions.Section));
