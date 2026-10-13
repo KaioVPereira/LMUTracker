@@ -1,0 +1,46 @@
+name: lmutracker
+
+# Deploy do LMUTracker. Por enquanto só o scanner (Worker) — a Api/site entram depois.
+# Segredos ficam no .env ao lado (NUNCA versionado). Veja .env.example.
+#
+# BANCO: o VPS do GameTracker é de 4GB e o SQL Server dele já ocupa ~2,5GB. Subir um SEGUNDO
+# SQL Server aqui pode estourar a RAM e derrubar a produção. Por isso o serviço `db` abaixo vem
+# COMENTADO. Opções:
+#   A) Reusar o SQL Server existente: aponte LMU_DB no .env para ele (Database=LmuTracker) e deixe o
+#      `db` comentado. (Requer que este serviço alcance aquele container — rede externa/host.)
+#   B) Servidor dedicado ao LMUTracker: descomente o `db` e use a conexão interna (Server=db).
+
+services:
+  worker:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.worker
+    environment:
+      DOTNET_ENVIRONMENT: Production
+      ConnectionStrings__Default: ${LMU_DB}
+      RaceOs__TicketProvider: steamkit
+      RaceOs__SteamKit__Username: ${STEAM_USERNAME}
+      RaceOs__SteamKit__SessionStorePath: /data/steam-session.json
+      Scanner__IntervalSeconds: "120"
+    env_file: .env
+    volumes:
+      - steam-session:/data   # refresh token da conta de serviço (gerado pelo bootstrap steam-login)
+    restart: unless-stopped
+    # depends_on: [db]   # descomente se usar o db dedicado abaixo
+
+  # ---- Banco dedicado (opção B). Só descomente em servidor com RAM sobrando. ----
+  # db:
+  #   image: mcr.microsoft.com/mssql/server:2022-latest
+  #   environment:
+  #     ACCEPT_EULA: "Y"
+  #     MSSQL_SA_PASSWORD: ${DB_PASSWORD}
+  #     MSSQL_PID: Express
+  #     MSSQL_MEMORY_LIMIT_MB: "1536"
+  #   mem_limit: 2048m
+  #   volumes:
+  #     - mssql-data:/var/opt/mssql
+  #   restart: unless-stopped
+
+volumes:
+  steam-session:
+  # mssql-data:

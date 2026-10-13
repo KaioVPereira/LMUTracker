@@ -1,0 +1,33 @@
+name: Deploy para produção
+
+# Publica a cada push na main (e permite disparo manual). Mesmo padrão do GameTracker: SSH no servidor,
+# puxa o código e reconstrói os contêineres. Requer no servidor: o repo clonado em /root/LMUTracker e o
+# arquivo deploy/.env preenchido (+ o bootstrap steam-login rodado uma vez para gerar o refresh token).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: lmutracker-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy por SSH (git pull + docker compose build)
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: root
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          command_timeout: 30m
+          script: |
+            set -e
+            cd /root/LMUTracker
+            git fetch --all
+            git reset --hard origin/main
+            cd deploy
+            docker compose up -d --build
+            docker image prune -f
