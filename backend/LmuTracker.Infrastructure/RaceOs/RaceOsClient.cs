@@ -13,7 +13,9 @@ namespace LmuTracker.Infrastructure.RaceOs;
 /// </summary>
 public sealed class RaceOsClient
 {
-    private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
+    // Nomes exatos (todos os DTOs têm JsonPropertyName). NÃO ligar case-insensitive: o resultado traz "Laps"
+    // (número de voltas) e "laps" (lista volta a volta) no mesmo objeto, e eles colidiriam.
+    private static readonly JsonSerializerOptions Json = new();
 
     private readonly IHttpClientFactory _factory;
     private readonly ISteamTicketProvider _ticket;
@@ -102,18 +104,6 @@ public sealed class RaceOsClient
             return Array.Empty<RaceOsEvent>();
         }
         return await resp.Content.ReadFromJsonAsync<List<RaceOsEvent>>(Json, ct) ?? new();
-    }
-
-    /// <summary>Agenda por tier: nome da série, pista e cena. Usada para dar título às corridas descobertas.</summary>
-    public async Task<ScheduleResult?> GetScheduleAsync(CancellationToken ct)
-    {
-        using var resp = await SendAsync(HttpMethod.Get, "/api/v1/daily/schedule", null, ct);
-        if (!resp.IsSuccessStatusCode)
-        {
-            _log.LogWarning("daily/schedule => HTTP {Code}", (int)resp.StatusCode);
-            return null;
-        }
-        return await resp.Content.ReadFromJsonAsync<ScheduleResult>(Json, ct);
     }
 
     // ---------- Expansão ----------

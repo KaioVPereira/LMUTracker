@@ -41,6 +41,10 @@ public class ScanEvent : Entity
     public string? Track { get; set; }
     public string? Scene { get; set; }
 
+    /// <summary>Largada oficial do evento (treino + quali + corrida), igual ao cronograma do jogo.</summary>
+    public DateTime? EventStartsAt { get; set; }
+
+    /// <summary>Início e fim previstos da SESSÃO de corrida (depois de treino e quali).</summary>
     public DateTime RaceStartsAt { get; set; }
     public DateTime RaceEndsAt { get; set; }
 

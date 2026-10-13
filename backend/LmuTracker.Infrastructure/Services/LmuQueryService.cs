@@ -27,20 +27,22 @@ public sealed class LmuQueryService : ILmuQueryService
         var lastFetched = await _db.ScanEvents.MaxAsync(e => e.FetchedAt, ct);
         DateTime? lastActivity = lastSeen > lastFetched || lastFetched is null ? lastSeen : lastFetched;
 
+        // "Largada" exibida = a oficial do evento (igual ao cronograma do jogo); RaceStartsAt é só o início
+        // da sessão de corrida e fica de reserva para eventos antigos, gravados antes desse campo existir.
         var upcoming = await _db.ScanEvents
             .Where(e => e.RaceEndsAt > now)
-            .OrderBy(e => e.RaceStartsAt)
+            .OrderBy(e => e.EventStartsAt ?? e.RaceStartsAt)
             .Take(12)
             .Select(e => new UpcomingRaceDto(
-                e.EventId, e.Title, e.Track, e.Tier, e.EventType, e.RaceStartsAt, e.RaceEndsAt))
+                e.EventId, e.Title, e.Track, e.Tier, e.EventType, e.EventStartsAt ?? e.RaceStartsAt, e.RaceEndsAt))
             .ToListAsync(ct);
 
         var recent = await _db.ScanEvents
             .Where(e => e.Status == ScanEventStatus.Fetched)
-            .OrderByDescending(e => e.RaceStartsAt)
+            .OrderByDescending(e => e.EventStartsAt ?? e.RaceStartsAt)
             .Take(10)
             .Select(e => new RecentRaceDto(
-                e.EventId, e.Title, e.Track, e.Tier, e.RaceStartsAt,
+                e.EventId, e.Title, e.Track, e.Tier, e.EventStartsAt ?? e.RaceStartsAt,
                 e.Splits.Count(),
                 e.Splits.Sum(s => s.DriverCount)))
             .ToListAsync(ct);
@@ -61,11 +63,12 @@ public sealed class LmuQueryService : ILmuQueryService
         var racesFound = await mine.CountAsync(ct);
 
         var recent = await mine
-            .OrderByDescending(r => r.RaceSplit.ScanEvent.RaceStartsAt)
+            .OrderByDescending(r => r.RaceSplit.ScanEvent.EventStartsAt ?? r.RaceSplit.ScanEvent.RaceStartsAt)
             .Take(15)
             .Select(r => new MyResultDto(
                 r.RaceSplit.ScanEvent.EventId, r.RaceSplit.ScanEvent.Title, r.RaceSplit.ScanEvent.Track,
-                r.RaceSplit.ScanEvent.Tier, r.RaceSplit.ScanEvent.RaceStartsAt, r.RaceSplit.SplitNo,
+                r.RaceSplit.ScanEvent.Tier, r.RaceSplit.ScanEvent.EventStartsAt ?? r.RaceSplit.ScanEvent.RaceStartsAt,
+                r.RaceSplit.SplitNo,
                 r.CarClass, r.VehName, r.GridPos, r.ClassGridPos, r.Position, r.ClassPosition, r.Laps,
                 r.BestLapTime, r.FinishStatus, r.DriverRankAdjustment, r.SafetyRankAdjustment))
             .ToListAsync(ct);

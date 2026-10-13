@@ -215,6 +215,9 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
 
+                    b.Property<DateTime?>("EventStartsAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("EventType")
                         .IsRequired()
                         .HasMaxLength(32)

@@ -48,20 +48,6 @@ public sealed class ScannerService
 
     public async Task DiscoverAsync(CancellationToken ct)
     {
-        // A lista de corridas não traz nome nem pista; a agenda traz, por série. Falhar aqui não pode
-        // impedir a descoberta (o que importa é guardar o eventId), então só registra e segue sem título.
-        var series = new Dictionary<string, ScheduleSeries>(StringComparer.OrdinalIgnoreCase);
-        try
-        {
-            var schedule = await _raceos.GetScheduleAsync(ct);
-            foreach (var s in schedule?.Tiers.Values.SelectMany(v => v) ?? Enumerable.Empty<ScheduleSeries>())
-                if (!string.IsNullOrEmpty(s.SeriesId)) series[s.SeriesId] = s;
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _log.LogWarning(ex, "Scanner: agenda indisponível; corridas novas ficam sem título por enquanto.");
-        }
-
         var found = 0;
         foreach (var tier in Tiers)
         {
@@ -69,7 +55,13 @@ public sealed class ScannerService
             foreach (var e in events)
             {
                 if (string.IsNullOrWhiteSpace(e.Id)) continue;
-                series.TryGetValue(e.SeriesId ?? "", out var info);
+
+                // Nome, largada oficial e pista vêm da configuração de cada corrida (é o que o jogo mostra).
+                var cfg = e.Configuration;
+                var track = cfg?.Content?.Track;
+                var title = cfg?.Title;
+                var trackName = TrackNames.Display(track?.Friendly, track?.Name);
+                var eventStarts = cfg?.Starts?.ToUniversalTime();
 
                 var existing = await _db.ScanEvents.FirstOrDefaultAsync(x => x.EventId == e.Id, ct);
                 if (existing is null)
@@ -78,11 +70,12 @@ public sealed class ScannerService
                     {
                         EventId = e.Id,
                         SeriesId = e.SeriesId ?? "",
-                        Title = e.Title ?? info?.EventName,
-                        Track = info?.Track,
-                        Scene = info?.Scene,
+                        Title = title,
+                        Track = trackName,
+                        Scene = track?.Name,
                         EventType = e.Type ?? "daily",
                         Tier = tier,
+                        EventStartsAt = eventStarts,
                         RaceStartsAt = (e.RaceStartsAt ?? DateTime.UtcNow).ToUniversalTime(),
                         RaceEndsAt = (e.RaceEndsAt ?? DateTime.UtcNow).ToUniversalTime(),
                         RaceOsStatus = e.Status,
@@ -92,12 +85,15 @@ public sealed class ScannerService
                 }
                 else if (existing.Status == ScanEventStatus.Pending)
                 {
-                    // Ainda não baixado: mantém horários/estado atualizados enquanto espera terminar.
+                    // Ainda não baixado: atualiza estado e horários. Nome/pista são sobrescritos de propósito:
+                    // uma versão anterior do scanner gravou nomes errados (cruzava pelo seriesId).
                     existing.RaceOsStatus = e.Status;
+                    if (e.RaceStartsAt is { } starts) existing.RaceStartsAt = starts.ToUniversalTime();
                     if (e.RaceEndsAt is { } ends) existing.RaceEndsAt = ends.ToUniversalTime();
-                    existing.Title ??= info?.EventName;
-                    existing.Track ??= info?.Track;
-                    existing.Scene ??= info?.Scene;
+                    if (eventStarts is not null) existing.EventStartsAt = eventStarts;
+                    if (title is not null) existing.Title = title;
+                    if (trackName is not null) existing.Track = trackName;
+                    if (track?.Name is not null) existing.Scene = track.Name;
                     existing.UpdatedAt = DateTime.UtcNow;
                 }
             }
@@ -251,9 +247,15 @@ public sealed class ScannerService
         e.TotalSplits = overview.TotalSplits;
         foreach (var (n, result) in results)
         {
-            if (e.Title is null) e.Title = result.Title;
-            e.Track ??= result.Track;
-            e.Scene ??= result.TrackScene;
+            // O resultado é a fonte final do nome. Se a cena da pista não bate com a guardada, o nome de pista
+            // guardado veio da versão antiga (errada) do scanner: troca pelo do resultado.
+            e.Title = result.Title ?? e.Title;
+            if (!string.IsNullOrEmpty(result.TrackScene) && !string.Equals(e.Scene, result.TrackScene, StringComparison.OrdinalIgnoreCase))
+            {
+                e.Scene = result.TrackScene;
+                e.Track = TrackNames.Display(null, result.TrackScene);
+            }
+            e.Track ??= TrackNames.Display(null, result.Track);
 
             var split = new RaceSplit { ScanEventId = e.Id, SplitNo = n };
             var bySteam = result.Drivers

@@ -11,32 +11,44 @@ internal sealed class AuthResult
     [JsonPropertyName("banned")] public bool Banned { get; set; }
 }
 
-/// <summary>Instância de corrida vinda de <c>daily/list/{tier}</c> ou do array <c>events</c> dos especiais.</summary>
+/// <summary>
+/// Instância de corrida vinda de <c>daily/list/{tier}</c>. Os dados da corrida em si (nome, largada oficial,
+/// pista) estão em <see cref="Configuration"/>. <see cref="RaceStartsAt"/>/<see cref="RaceEndsAt"/> são da
+/// SESSÃO de corrida (depois de treino e quali), não do evento — o jogo mostra <c>configuration.starts</c>.
+/// </summary>
 public sealed class RaceOsEvent
 {
     [JsonPropertyName("id")] public string Id { get; set; } = null!;
     [JsonPropertyName("seriesId")] public string? SeriesId { get; set; }
     [JsonPropertyName("type")] public string? Type { get; set; }
-    [JsonPropertyName("title")] public string? Title { get; set; }
     [JsonPropertyName("raceStartsAt")] public DateTime? RaceStartsAt { get; set; }
     [JsonPropertyName("raceEndsAt")] public DateTime? RaceEndsAt { get; set; }
     [JsonPropertyName("status")] public string? Status { get; set; }
+    [JsonPropertyName("configuration")] public EventConfiguration? Configuration { get; set; }
 }
 
-// ----- Agenda (daily/schedule): uma série por tier, com nome, pista e horários -----
-
-public sealed class ScheduleResult
+public sealed class EventConfiguration
 {
-    [JsonPropertyName("tiers")] public Dictionary<string, List<ScheduleSeries>> Tiers { get; set; } = new();
+    [JsonPropertyName("title")] public string? Title { get; set; }
+
+    /// <summary>Largada oficial do evento (o horário que o jogo mostra no cronograma).</summary>
+    [JsonPropertyName("starts")] public DateTime? Starts { get; set; }
+
+    [JsonPropertyName("content")] public EventContent? Content { get; set; }
 }
 
-public sealed class ScheduleSeries
+public sealed class EventContent
 {
-    [JsonPropertyName("seriesid")] public string? SeriesId { get; set; }
-    [JsonPropertyName("eventname")] public string? EventName { get; set; }
-    [JsonPropertyName("track")] public string? Track { get; set; }
-    [JsonPropertyName("scene")] public string? Scene { get; set; }
-    [JsonPropertyName("duration")] public string? Duration { get; set; }
+    [JsonPropertyName("track")] public EventTrack? Track { get; set; }
+}
+
+public sealed class EventTrack
+{
+    /// <summary>Nome interno da pista (ex.: MonzaWEC).</summary>
+    [JsonPropertyName("name")] public string? Name { get; set; }
+
+    /// <summary>Nome "amigável" — às vezes limpo ("Monza"), às vezes com sufixo interno ("FujiWEC_2023").</summary>
+    [JsonPropertyName("friendly")] public string? Friendly { get; set; }
 }
 
 public sealed class OverviewResult

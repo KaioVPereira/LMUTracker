@@ -36,12 +36,17 @@ if (args.Contains("report"))
     Console.WriteLine($"ScanEvents: {events} (pendentes {pending}, baixados {fetched})");
     Console.WriteLine($"Splits: {splits} | Resultados: {results} | Pilotos no índice: {drivers}");
 
-    var next = await db.ScanEvents.OrderBy(e => e.RaceStartsAt).Take(6)
-        .Select(e => new { e.Tier, e.EventType, e.RaceStartsAt, e.RaceOsStatus, e.EventId })
+    var now = DateTime.UtcNow;
+    var next = await db.ScanEvents.Where(e => e.RaceEndsAt > now)
+        .OrderBy(e => e.EventStartsAt ?? e.RaceStartsAt).Take(9)
+        .Select(e => new { e.Tier, e.EventStartsAt, e.RaceStartsAt, e.Title, e.Track, e.RaceOsStatus })
         .ToListAsync();
-    Console.WriteLine("Próximas na agenda:");
+    Console.WriteLine("Próximas na agenda (largada oficial, UTC):");
     foreach (var e in next)
-        Console.WriteLine($"  {e.RaceStartsAt:MM-dd HH:mm} | {e.Tier,-12} | {e.RaceOsStatus,-8} | {e.EventId[..8]}…");
+        Console.WriteLine($"  {e.EventStartsAt ?? e.RaceStartsAt:HH:mm} | {e.Tier,-12} | {e.Title,-42} | {e.Track,-18} | {e.RaceOsStatus}");
+
+    var byStatus = await db.ScanEvents.GroupBy(e => e.Status).Select(g => new { g.Key, N = g.Count() }).ToListAsync();
+    Console.WriteLine("Por estado: " + string.Join(", ", byStatus.Select(s => $"{s.Key}={s.N}")));
     return;
 }
 
