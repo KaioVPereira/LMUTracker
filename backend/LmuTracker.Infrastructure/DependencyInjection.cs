@@ -1,6 +1,9 @@
+using LmuTracker.Application.Auth;
+using LmuTracker.Infrastructure.Auth;
 using LmuTracker.Infrastructure.Persistence;
 using LmuTracker.Infrastructure.RaceOs;
 using LmuTracker.Infrastructure.Scanning;
+using LmuTracker.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,6 +16,11 @@ public static class DependencyInjection
     {
         services.AddDbContext<AppDbContext>(opt =>
             opt.UseSqlServer(config.GetConnectionString("Default")));
+
+        // ---- Autenticação (site) ----
+        services.Configure<JwtOptions>(config.GetSection(JwtOptions.Section));
+        services.AddSingleton<ITokenService, TokenService>();
+        services.AddScoped<IAuthService, AuthService>();
 
         services.Configure<RaceOsOptions>(config.GetSection(RaceOsOptions.Section));
         services.Configure<SteamKitOptions>(config.GetSection(SteamKitOptions.Section));
