@@ -1,0 +1,61 @@
+import { useEffect, useId, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
+import { initials } from '../lib/format'
+import { startSteamLink } from '../lib/steam'
+
+/** Avatar no canto da barra: abre um menu com o perfil e sair (e vincular a Steam, enquanto não vinculou). */
+export function AccountMenu() {
+  const { user, logout } = useAuth()
+  const [open, setOpen] = useState(false)
+  const root = useRef<HTMLDivElement>(null)
+  const button = useRef<HTMLButtonElement>(null)
+  const menuId = useId()
+
+  // Fecha ao clicar fora ou com Esc (e devolve o foco ao avatar).
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => { if (!root.current?.contains(e.target as Node)) setOpen(false) }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setOpen(false); button.current?.focus() } }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
+  }, [open])
+
+  if (!user) return null
+  const close = () => setOpen(false)
+
+  return (
+    <div className="acct" ref={root}>
+      <button ref={button} type="button" className="user-chip acct-btn" aria-haspopup="menu" aria-expanded={open}
+        aria-controls={menuId} onClick={() => setOpen((o) => !o)}>
+        <span className="ava" aria-hidden="true">{initials(user.displayName)}</span>
+        <span className="name">{user.displayName}</span>
+        <svg aria-hidden="true" className="acct-caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="m6 9 6 6 6-6" /></svg>
+        <span className="sr-only">Menu da conta</span>
+      </button>
+      {open && (
+        <div className="acct-menu" id={menuId} role="menu" aria-label="Conta">
+          <div className="acct-head">
+            <b>{user.displayName}</b>
+            <span>{user.steamId ? 'Steam vinculada' : 'Steam não vinculada'}</span>
+          </div>
+          <Link to="/perfil" role="menuitem" className="acct-item" onClick={close}>
+            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="8" r="4" /><path d="M4 21c1-4 4-6 8-6s7 2 8 6" /></svg>
+            Meu perfil
+          </Link>
+          {!user.steamId && (
+            <button type="button" role="menuitem" className="acct-item" onClick={() => { close(); void startSteamLink() }}>
+              <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" /></svg>
+              Vincular Steam
+            </button>
+          )}
+          <button type="button" role="menuitem" className="acct-item is-danger" onClick={() => { close(); logout() }}>
+            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h11" /></svg>
+            Sair
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}

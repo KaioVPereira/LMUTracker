@@ -1,18 +1,22 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { api, ApiError } from '../api/client'
-import type { MyDriver, Overview, UpcomingRace, UserDto } from '../api/types'
+import type { EventInfo, Home, Overview, UpcomingRace } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
-import {
-  ClassChip, ClassChips, CountUp, EmptyState, ErrorBox, Loading, RowsSkeleton, Skeleton, TierChip, TrackArt,
-} from '../components/Bits'
+import { ClassChips, CountUp, EmptyState, ErrorBox, RowsSkeleton, Skeleton, TierChip } from '../components/Bits'
+import { Carousel, Highlights, HomeEmpty, RecordCard, WinnerCard } from '../components/HomeSections'
 import { TopBar } from '../components/TopBar'
-import {
-  badgeLabel, fmtClock, fmtDateTime, fmtDelta, fmtInt, fmtLap, fmtRelative, fmtTime, parseUtc, rankClass, typeLabel,
-} from '../lib/format'
+import { currentPhase, fmtGameTime, isWet, phasesOf, raceSession, sessionsSummary, skyLabel } from '../lib/eventPhase'
+import { fmtClock, fmtDateTime, fmtInt, fmtRelative, fmtTime, parseUtc, typeLabel } from '../lib/format'
 
+// "Ao vivo" = a agenda e o estado das corridas, relidos a cada 30 s (o scanner atualiza a cada 2 min). Os destaques
+// vêm de um cache de 60 s no servidor, então relemos a cada minuto. Da corrida em si o RaceOS não publica a
+// cronometragem de terceiros: o que mostramos ao vivo é a fase (treino, classificação, corrida) e as condições.
 const REFRESH_MS = 30_000
+const HOME_REFRESH_MS = 60_000
 const CLOCK_MS = 30_000
+const UPCOMING_SHOWN = 8
+const AUTOPLAY_MS = 4_500
 
 /** Relógio de estado: "Ao vivo" e "em X min" mudam com ele, não a cada render. */
 function useNow(every = CLOCK_MS): number {
@@ -35,7 +39,8 @@ export function DashboardPage() {
 
   const [overview, setOverview] = useState<Overview | null>(null)
   const [overviewError, setOverviewError] = useState<string | null>(null)
-  const [me, setMe] = useState<MyDriver | null>(null)
+  const [home, setHome] = useState<Home | null>(null)
+  const [homeError, setHomeError] = useState(false)
   const now = useNow()
 
   // Limpa o state da navegação para o aviso não voltar ao recarregar.
@@ -49,8 +54,8 @@ export function DashboardPage() {
       .catch((e) => setOverviewError(e instanceof ApiError ? e.message : 'Não foi possível carregar.'))
   }, [])
 
-  const loadMe = useCallback(() => {
-    api<MyDriver>('/lmu/me').then(setMe).catch(() => setMe(null))
+  const loadHome = useCallback(() => {
+    api<Home>('/lmu/home').then((h) => { setHome(h); setHomeError(false) }).catch(() => setHomeError(true))
   }, [])
 
   useEffect(() => {
@@ -59,13 +64,20 @@ export function DashboardPage() {
     return () => window.clearInterval(id)
   }, [loadOverview])
 
-  useEffect(() => { loadMe() }, [loadMe, user?.steamId])
+  useEffect(() => {
+    loadHome()
+    const id = window.setInterval(loadHome, HOME_REFRESH_MS)
+    return () => window.clearInterval(id)
+  }, [loadHome])
 
   if (!user) return null
 
   const upcoming = overview?.upcoming ?? []
   const live = upcoming.filter((r) => isLive(r, now))
-  const heroRace = live[0] ?? upcoming.find((r) => parseUtc(r.startsAt).getTime() > now) ?? null
+  const next = upcoming.filter((r) => parseUtc(r.startsAt).getTime() > now)
+  // No destaque, prefere a corrida ao vivo que tem a linha do tempo das sessões (mais informação para mostrar).
+  const heroRace = live.find((r) => r.info?.sessions.length) ?? live[0] ?? next[0] ?? null
+  const otherLive = live.filter((r) => r !== heroRace)
 
   return (
     <>
@@ -88,42 +100,53 @@ export function DashboardPage() {
             </EmptyState>
           )}
 
-        {user.steamId ? <MyDriverPanel me={me} onUnlinked={loadMe} /> : <LinkBanner />}
+        {otherLive.length > 0 && (
+          <Carousel id="sec-live" title="Também ao vivo" sub={`${otherLive.length} corrida${otherLive.length === 1 ? '' : 's'}`} autoPlayMs={AUTOPLAY_MS} narrow>
+            {otherLive.map((r) => <LiveCard key={r.eventId} race={r} now={now} />)}
+          </Carousel>
+        )}
 
-        <section aria-label="Números do Pitwall" className="tiles">
-          <Tile n={overview?.racesFetched} l="corridas com resultado" />
-          <Tile n={overview?.resultsStored} l="resultados guardados" />
-          <Tile n={overview?.driversIndexed} l="pilotos conhecidos" />
-          <Tile n={overview?.eventsTracked} l="corridas acompanhadas" />
-        </section>
+        {homeError && <ErrorBox message="Não deu para carregar os destaques agora." onRetry={loadHome} />}
+
+        <Carousel id="sec-recordes" title="Voltas mais rápidas" sub="melhor volta da semana por pista e classe" loading={!home && !homeError}>
+          {home?.records.length ? home.records.map((r) => <RecordCard key={`${r.track}-${r.carClass}-${r.fixedSetup}`} r={r} now={now} />) : <HomeEmpty what="recordes" />}
+        </Carousel>
+
+        <Carousel id="sec-vencedores" title="Vencedores do top split" sub="split 1, por classe" loading={!home && !homeError} autoPlayMs={AUTOPLAY_MS}>
+          {home?.winners.length ? home.winners.map((w) => <WinnerCard key={`${w.eventId}-${w.carClass}`} w={w} now={now} />) : <HomeEmpty what="vencedores" />}
+        </Carousel>
+
+        {home && <Highlights climbers={home.climbers} close={home.closeFinishes} active={home.mostActive} share={home.classShare} />}
 
         <section aria-labelledby="sec-agenda">
           <div className="sec-h">
-            <h2 id="sec-agenda">Agenda</h2>
+            <h2 id="sec-agenda">Próximas largadas</h2>
             <span className="rel">horário local</span>
             {overview?.lastActivityAt && (
               <span className="rel" style={{ marginLeft: 'auto' }}>scanner ativo {fmtRelative(overview.lastActivityAt, now)}</span>
             )}
           </div>
-          {!overview ? <RowsSkeleton rows={6} /> : upcoming.length ? (
+          {!overview ? <RowsSkeleton rows={6} /> : next.length ? (
             <div className="rows">
-              {upcoming.map((r) => {
-                const on = isLive(r, now)
-                return (
-                  <Link key={r.eventId} to={`/corridas/${r.eventId}`} className={`rowi${on ? ' is-live' : ''}`}>
-                    <span className="rowi-time">
-                      {fmtTime(r.startsAt)}
-                      <small>{on ? 'AO VIVO' : fmtRelative(r.startsAt, now)}</small>
-                    </span>
-                    <span className="rowi-main">
-                      <b>{r.title ?? 'Corrida diária'}</b>
-                      <span>{r.track ?? '—'} · {typeLabel(r.eventType)}</span>
-                    </span>
-                    <span className="rowi-side"><TierChip tier={r.tier} /></span>
-                    <span className="rowi-num">até {fmtTime(r.endsAt)}</span>
-                  </Link>
-                )
-              })}
+              {next.slice(0, UPCOMING_SHOWN).map((r) => (
+                <div key={r.eventId} className="rowi">
+                  <span className="rowi-time">
+                    {fmtTime(r.startsAt)}
+                    <small>{fmtRelative(r.startsAt, now)}</small>
+                  </span>
+                  <span className="rowi-main">
+                    <b>{r.title ?? 'Corrida diária'}</b>
+                    <span>{[r.track ?? '—', sessionsSummary(r.info), conditions(r.info)].filter(Boolean).join(' · ')}</span>
+                  </span>
+                  <span className="rowi-side">
+                    {r.info?.fixedSetup !== null && r.info?.fixedSetup !== undefined && (
+                      <span className={`setup ${r.info.fixedSetup ? 'is-fixed' : ''}`}>{r.info.fixedSetup ? 'Setup fixo' : 'Setup livre'}</span>
+                    )}
+                    <TierChip tier={r.tier} />
+                  </span>
+                  <span className="rowi-num">até {fmtTime(r.endsAt)}</span>
+                </div>
+              ))}
             </div>
           ) : (
             <EmptyState title="Agenda vazia">Nenhuma corrida futura na agenda neste momento.</EmptyState>
@@ -143,7 +166,7 @@ export function DashboardPage() {
             </div>
           ) : overview.recent.length ? (
             <div className="grid-cards">
-              {overview.recent.map((r) => (
+              {overview.recent.slice(0, 8).map((r) => (
                 <Link key={r.eventId} to={`/corridas/${r.eventId}`} className="race-card lift">
                   <span className="top"><TierChip tier={r.tier} /><span className="rel">{fmtRelative(r.startsAt, now)}</span></span>
                   <h3>{r.title ?? 'Corrida diária'}</h3>
@@ -160,6 +183,16 @@ export function DashboardPage() {
           )}
         </section>
 
+        <section aria-labelledby="sec-numeros">
+          <div className="sec-h"><h2 id="sec-numeros">O Pitwall em números</h2></div>
+          <div className="tiles">
+            <Tile n={overview?.racesFetched} l="corridas com resultado" />
+            <Tile n={overview?.resultsStored} l="resultados guardados" />
+            <Tile n={overview?.driversIndexed} l="pilotos conhecidos" />
+            <Tile n={overview?.eventsTracked} l="corridas acompanhadas" />
+          </div>
+        </section>
+
         <div className="foot">
           Pitwall não é afiliado à Motorsport Games nem ao Le Mans Ultimate. Horários no seu fuso local.
         </div>
@@ -168,26 +201,94 @@ export function DashboardPage() {
   )
 }
 
-/** Corrida em destaque: a que está acontecendo (contagem até a bandeira) ou a próxima (contagem até a largada). */
+/** "15:00 no jogo · 25 °C · céu limpo" — condições da largada da corrida. */
+function conditions(info: EventInfo | null): string | null {
+  const s = raceSession(info)
+  if (!s) return null
+  const parts = [`${fmtGameTime(s.timeOfDay)} no jogo`]
+  if (s.temperatureC !== null) parts.push(`${s.temperatureC} °C`)
+  if (s.rainChance) parts.push(`chuva ${s.rainChance}%`)
+  else if (isWet(s.sky)) parts.push(skyLabel(s.sky)!.toLowerCase())
+  return parts.join(' · ')
+}
+
+/** Linha do tempo das sessões, com a atual destacada e o progresso dela. */
+function Phases({ race, now }: { race: UpcomingRace; now: number }) {
+  const phases = phasesOf(race)
+  if (!phases.length) return null
+  const cur = currentPhase(phases, now)
+  const total = phases[phases.length - 1].end - phases[0].start
+  return (
+    <ol className="phases" aria-label="Sessões do evento">
+      {phases.map((p, i) => {
+        const done = i < cur
+        const on = i === cur
+        const pct = on ? Math.min(100, ((now - p.start) / (p.end - p.start)) * 100) : done ? 100 : 0
+        return (
+          <li key={p.kind + i} className={`ph${on ? ' is-on' : ''}${done ? ' is-done' : ''}`}
+            style={{ flexGrow: Math.max(1, (p.end - p.start) / total * 10) }} aria-current={on ? 'step' : undefined}>
+            <i><b style={{ width: `${pct}%` }} /></i>
+            <span>{p.label}<small>{Math.round(p.minutes)} min</small></span>
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
+/**
+ * Corrida em destaque. Ao vivo: a fase atual e quanto falta para a próxima; antes: contagem até a largada.
+ * Sem botão de "acompanhar" — o RaceOS não publica a cronometragem durante a corrida.
+ */
 function Hero({ race, live, liveCount }: { race: UpcomingRace; live: boolean; liveCount: number }) {
   const now = useNow(1000)
-  const target = parseUtc(live ? race.endsAt : race.startsAt).getTime()
+  const phases = phasesOf(race)
+  const cur = currentPhase(phases, now)
+  const phase = cur >= 0 && cur < phases.length ? phases[cur] : null
+  const nextPhase = phases[cur + 1]
+  const s = raceSession(race.info)
+
+  let clock: { value: number; label: string }
+  if (!live) clock = { value: parseUtc(race.startsAt).getTime() - now, label: 'para a largada' }
+  else if (phase && phase.kind !== 'race' && nextPhase) clock = { value: nextPhase.start - now, label: `para ${nextPhase.kind === 'race' ? 'a largada da corrida' : nextPhase.label.toLowerCase()}` }
+  else clock = { value: parseUtc(race.endsAt).getTime() - now, label: 'para a bandeira' }
+
   return (
     <article className={`hero${live ? '' : ' is-next'}`} aria-labelledby="hero-title">
-      <TrackArt className="hero-art" />
       <div className="hero-main">
-        {live ? <span className="live">Ao vivo{liveCount > 1 ? ` · ${liveCount} corridas` : ''}</span> : <span className="next-tag">Próxima largada</span>}
+        {live
+          ? <span className="live">Ao vivo{phase ? ` · ${phase.label}` : ''}{liveCount > 1 ? ` · ${liveCount} corridas` : ''}</span>
+          : <span className="next-tag">Próxima largada</span>}
         <h1 id="hero-title" className="hero-title">{race.title ?? 'Corrida diária'}</h1>
-        <p className="hero-sub">{race.track ?? '—'} · {typeLabel(race.eventType)} · largada {fmtTime(race.startsAt)}</p>
-        <span className="chips"><TierChip tier={race.tier} /></span>
-        <div className="hero-actions">
-          <Link to={`/corridas/${race.eventId}`} className="btn btn-primary">{live ? 'Acompanhar' : 'Ver detalhes'}</Link>
-          <span className="hero-clock" aria-live="off">
-            <b>{fmtClock(target - now)}</b>{live ? 'para a bandeira' : 'para a largada'}
-          </span>
-        </div>
+        <p className="hero-sub">{race.track ?? '—'} · {typeLabel(race.eventType)} · começa {fmtTime(race.startsAt)}</p>
+        <div className="hero-clock" aria-live="off"><b>{fmtClock(clock.value)}</b>{clock.label}</div>
+        <Phases race={race} now={now} />
       </div>
+      <dl className="hero-facts">
+        <div><dt>Nível</dt><dd><TierChip tier={race.tier} /></dd></div>
+        {s && <div><dt>Hora no jogo</dt><dd className="mono">{fmtGameTime(s.timeOfDay)}</dd></div>}
+        {s?.temperatureC !== null && s?.temperatureC !== undefined && <div><dt>Temperatura</dt><dd>{s.temperatureC} °C</dd></div>}
+        {s && <div><dt>Céu</dt><dd>{skyLabel(s.sky) ?? '—'}{s.rainChance ? ` · chuva ${s.rainChance}%` : ''}</dd></div>}
+        {race.info?.fixedSetup !== null && race.info?.fixedSetup !== undefined && <div><dt>Setup</dt><dd>{race.info.fixedSetup ? 'Fixo' : 'Livre'}</dd></div>}
+        {race.info?.maxPlayers && <div><dt>Grid por split</dt><dd className="mono">até {race.info.maxPlayers}</dd></div>}
+        <div className="fact-end"><dt>Termina</dt><dd className="mono">~{fmtTime(race.endsAt)}</dd></div>
+      </dl>
     </article>
+  )
+}
+
+/** Card de uma corrida acontecendo agora (sem link: ainda não há resultado para mostrar). */
+function LiveCard({ race, now }: { race: UpcomingRace; now: number }) {
+  const phases = phasesOf(race)
+  const cur = currentPhase(phases, now)
+  const phase = cur >= 0 && cur < phases.length ? phases[cur] : null
+  return (
+    <div className="car-card live-card">
+      <span className="live">Ao vivo{phase ? ` · ${phase.label}` : ''}</span>
+      <b>{race.title ?? 'Corrida diária'}</b>
+      <span className="meta">{race.track ?? '—'} · até {fmtTime(race.endsAt)}</span>
+      <span className="chips"><TierChip tier={race.tier} />{conditions(race.info) && <span className="rel">{conditions(race.info)}</span>}</span>
+    </div>
   )
 }
 
@@ -198,7 +299,7 @@ function HeroSkeleton() {
         <Skeleton w={130} h={22} r={999} />
         <Skeleton w="70%" h={56} r={12} />
         <Skeleton w="45%" h={16} />
-        <Skeleton w={160} h={44} r={999} />
+        <Skeleton w="60%" h={30} r={8} />
       </div>
     </div>
   )
@@ -209,143 +310,6 @@ function Tile({ n, l }: { n: number | undefined; l: string }) {
     <div className="tile">
       <span className="n">{n === undefined ? <Skeleton w={70} h={30} /> : <CountUp value={n} />}</span>
       <span className="l">{l}</span>
-    </div>
-  )
-}
-
-function LinkBanner() {
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  async function start() {
-    setBusy(true)
-    setError(null)
-    try {
-      const { url } = await api<{ url: string }>('/link/steam/start')
-      window.location.assign(url)
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Não foi possível iniciar o vínculo.')
-      setBusy(false)
-    }
-  }
-
-  return (
-    <div className="link-banner">
-      <div>
-        <h3>Vincule sua conta Steam</h3>
-        <p>
-          É assim que encontramos você nas corridas. O login acontece no site da Steam e só confirma qual é o
-          seu SteamID: não recebemos sua senha.
-        </p>
-        {error && <div className="form-error" style={{ marginTop: 10 }}>{error}</div>}
-      </div>
-      <button type="button" className="btn btn-primary" onClick={start} disabled={busy}>
-        {busy ? 'Abrindo a Steam…' : 'Entrar com a Steam'}
-      </button>
-    </div>
-  )
-}
-
-function MyDriverPanel({ me, onUnlinked }: { me: MyDriver | null; onUnlinked: () => void }) {
-  const { refreshUser } = useAuth()
-  const navigate = useNavigate()
-  const [busy, setBusy] = useState(false)
-
-  async function unlink() {
-    setBusy(true)
-    try {
-      await api<UserDto>('/link/steam', { method: 'DELETE' })
-      await refreshUser()
-      onUnlinked()
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const unlinkBtn = (
-    <button type="button" className="btn btn-ghost btn-sm" onClick={unlink} disabled={busy}>
-      Desvincular Steam
-    </button>
-  )
-
-  if (!me) return <Loading what="Carregando seu piloto…" rows={2} />
-
-  if (!me.found) {
-    return (
-      <EmptyState title="Ainda não vimos você correr" action={unlinkBtn}>
-        Steam vinculada. O Pitwall registra as corridas oficiais desde que o scanner começou a rodar: depois da
-        sua próxima corrida, os resultados aparecem aqui uns 10 minutos após a bandeira.
-      </EmptyState>
-    )
-  }
-
-  const badge = badgeLabel(me.badge)
-
-  return (
-    <section aria-labelledby="sec-piloto">
-      <div className="sec-h">
-        <h2 id="sec-piloto">Seu piloto</h2>
-        <span className="rel">{me.racesFound} corrida{me.racesFound === 1 ? '' : 's'} encontrada{me.racesFound === 1 ? '' : 's'}</span>
-      </div>
-
-      <div className="driver">
-        <div>
-          <span className="driver-name">
-            {me.driverId ? <Link to={`/pilotos/${me.driverId}`} className="plain">{me.name}</Link> : me.name}
-          </span>
-          <span className="driver-sub">
-            {me.nationality && <span className="pill">{me.nationality}</span>}
-            {badge && <span className="pill">{badge}</span>}
-            {me.lastSeenAt && <span>visto {fmtRelative(me.lastSeenAt)}</span>}
-          </span>
-          <div style={{ marginTop: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {me.driverId && <Link to={`/pilotos/${me.driverId}`} className="btn btn-sm btn-primary">Ver perfil completo</Link>}
-            {unlinkBtn}
-          </div>
-        </div>
-        <RankCell label="Driver Rank" title={me.driverRankTitle} tier={me.driverRankTier} />
-        <RankCell label="Safety Rank" title={me.safetyRankTitle} tier={me.safetyRankTier} />
-      </div>
-
-      <div className="tbl-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Data</th><th>Evento</th><th>Pista</th><th>Classe</th>
-              <th className="num">Largada</th><th className="num">Chegada</th><th className="num">Melhor volta</th>
-              <th className="num">ΔDR</th><th className="num">ΔSR</th>
-            </tr>
-          </thead>
-          <tbody>
-            {me.recent.map((r) => {
-              const dr = fmtDelta(r.driverRankAdjustment)
-              const sr = fmtDelta(r.safetyRankAdjustment)
-              return (
-                <tr key={r.resultId} className="row-link" onClick={() => navigate(`/resultados/${r.resultId}`)}>
-                  <td className="mono">{fmtDateTime(r.startsAt)}</td>
-                  <td><Link to={`/resultados/${r.resultId}`} onClick={(e) => e.stopPropagation()}>{r.title ?? 'Corrida diária'}</Link></td>
-                  <td>{r.track ?? '—'}</td>
-                  <td><ClassChip cls={r.carClass} /></td>
-                  <td className="num">{(r.classGridPos ?? r.gridPos) ? `P${r.classGridPos ?? r.gridPos}` : '—'}</td>
-                  <td className="num">{r.classPosition ? `P${r.classPosition}` : (r.finishStatus ?? '—')}</td>
-                  <td className="num">{fmtLap(r.bestLapTime)}</td>
-                  <td className={`num ${dr.cls}`}>{dr.text}</td>
-                  <td className={`num ${sr.cls}`}>{sr.text}</td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  )
-}
-
-function RankCell({ label, title, tier }: { label: string; title: string | null; tier: number | null }) {
-  return (
-    <div>
-      <span className="rank-lab">{label}</span>
-      <span className={`rank-big ${rankClass(title)}`}>{title ?? '—'}{title && tier !== null ? ` ${tier}` : ''}</span>
     </div>
   )
 }

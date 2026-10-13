@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
-import { initials } from '../lib/format'
+import { AccountMenu } from './AccountMenu'
 import { CommandPalette } from './CommandPalette'
 
 export function Logo() {
@@ -46,7 +46,7 @@ function Icon({ name }: { name: keyof typeof ICONS }) {
 
 /** Barra de cima (desktop e celular) + barra de abas embaixo no celular. */
 export function TopBar() {
-  const { user, logout } = useAuth()
+  const { user } = useAuth()
   const [searchOpen, setSearchOpen] = useState(false)
   const [openSearch] = useState(() => () => setSearchOpen(true))
   useSearchShortcut(openSearch)
@@ -71,13 +71,7 @@ export function TopBar() {
           )}
           {user && (
             <div className="bar-right">
-              <span className="user-chip">
-                <span className="ava" aria-hidden="true">{initials(user.displayName)}</span>
-                <span className="name">{user.displayName}</span>
-              </span>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={logout}>
-                Sair
-              </button>
+              <AccountMenu />
             </div>
           )}
         </div>

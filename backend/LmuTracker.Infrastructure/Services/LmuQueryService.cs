@@ -26,7 +26,7 @@ public sealed class LmuQueryService : ILmuQueryService
         var now = DateTime.UtcNow;
 
         var eventsTracked = await _db.ScanEvents.CountAsync(ct);
-        var racesFetched = await _db.ScanEvents.CountAsync(e => e.Status == ScanEventStatus.Fetched, ct);
+        var racesFetched = await _db.ScanEvents.CountAsync(e => e.Splits.Any(), ct);
         var resultsStored = await _db.RaceResults.CountAsync(ct);
         var driversIndexed = await _db.Drivers.CountAsync(ct);
 
@@ -36,16 +36,23 @@ public sealed class LmuQueryService : ILmuQueryService
 
         // "Largada" exibida = a oficial do evento (igual ao cronograma do jogo); RaceStartsAt é só o início
         // da sessão de corrida e fica de reserva para eventos antigos, gravados antes desse campo existir.
-        var upcoming = await _db.ScanEvents
-            .Where(e => e.RaceEndsAt > now)
-            .OrderBy(e => e.EventStartsAt ?? e.RaceStartsAt)
-            .Take(12)
-            .Select(e => new UpcomingRaceDto(
-                e.EventId, e.Title, e.Track, e.Tier, e.EventType, e.EventStartsAt ?? e.RaceStartsAt, e.RaceEndsAt))
-            .ToListAsync(ct);
+        // Sessões, clima e regras vêm da configuração guardada pelo scanner (poucos KB por corrida, lidos aqui).
+        var upcoming = (await _db.ScanEvents
+                .Where(e => e.RaceEndsAt > now)
+                .OrderBy(e => e.EventStartsAt ?? e.RaceStartsAt)
+                .Take(12)
+                .Select(e => new
+                {
+                    e.EventId, e.Title, e.Track, e.Tier, e.EventType, Starts = e.EventStartsAt ?? e.RaceStartsAt,
+                    e.RaceEndsAt, e.ConfigData,
+                })
+                .ToListAsync(ct))
+            .Select(e => new UpcomingRaceDto(e.EventId, e.Title, e.Track, e.Tier, e.EventType, e.Starts, e.RaceEndsAt,
+                EventConfigReader.Read(e.ConfigData)))
+            .ToList();
 
         var recent = await _db.ScanEvents
-            .Where(e => e.Status == ScanEventStatus.Fetched)
+            .Where(e => e.Splits.Any())
             .OrderByDescending(e => e.EventStartsAt ?? e.RaceStartsAt)
             .Take(10)
             .Select(e => new RecentRaceDto(
@@ -104,7 +111,9 @@ public sealed class LmuQueryService : ILmuQueryService
         string? tier, string? track, string? car, int page, CancellationToken ct = default)
     {
         page = Math.Max(1, page);
-        var q = _db.ScanEvents.Where(e => e.Status == ScanEventStatus.Fetched && e.Splits.Any());
+        // Corrida com resultado gravado aparece mesmo se voltou à fila para ser baixada de novo (reprocessamento):
+        // os splits antigos só são trocados quando o novo download termina.
+        var q = _db.ScanEvents.Where(e => e.Splits.Any());
         if (tier == "weekly") q = q.Where(e => e.EventType == "weekly");
         else if (!string.IsNullOrWhiteSpace(tier)) q = q.Where(e => e.Tier == tier);
         if (!string.IsNullOrWhiteSpace(track)) q = q.Where(e => e.Track == track);

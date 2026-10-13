@@ -2,6 +2,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import type { DriverProfile } from '../api/types'
 import { ClassChip, Delta, ErrorBox, Loading, Progress, Rank, TierChip } from '../components/Bits'
 import { Pager } from '../components/Pager'
+import { UnlinkSteamButton } from '../components/SteamLink'
 import { TopBar } from '../components/TopBar'
 import { badgeLabel, finishLabel, fmtDateTime, fmtInt, fmtLap, fmtRelative, rankClass } from '../lib/format'
 import { useApi } from '../lib/useApi'
@@ -36,6 +37,7 @@ export function DriverPage() {
               {badge && <span className="pill">{badge}</span>}
               <span>visto {fmtRelative(d.lastSeenAt)}</span>
             </span>
+            {d.isMe && <span style={{ marginTop: 'auto' }}><UnlinkSteamButton onDone={() => navigate('/perfil')} /></span>}
           </div>
           <RankCard label="Driver Rank (DR)" title={d.driverRankTitle} tier={d.driverRankTier} progress={d.driverRankProgress} />
           <RankCard label="Safety Rank (SR)" title={d.safetyRankTitle} tier={d.safetyRankTier} progress={d.safetyRankProgress} />

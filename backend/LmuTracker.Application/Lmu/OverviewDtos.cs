@@ -1,9 +1,16 @@
 namespace LmuTracker.Application.Lmu;
 
+/// <summary>Uma sessão do evento. Minutos; horário no jogo em minutos desde 0h; céu 0 (limpo) … 10 (tempestade).</summary>
+public record SessionInfoDto(
+    string Kind, double Minutes, double WaitMinutes, double TimeOfDay, int? Sky, int? TemperatureC, int? RainChance);
+
+/// <summary>O que a configuração do evento diz (só existe para corridas vistas na agenda a partir do scanner v3).</summary>
+public record EventInfoDto(IReadOnlyList<SessionInfoDto> Sessions, bool? FixedSetup, int? MaxPlayers);
+
 /// <summary>Corrida da agenda que ainda vai acontecer (ou está acontecendo).</summary>
 public record UpcomingRaceDto(
     string EventId, string? Title, string? Track, string? Tier, string EventType,
-    DateTime StartsAt, DateTime EndsAt);
+    DateTime StartsAt, DateTime EndsAt, EventInfoDto? Info);
 
 /// <summary>Corrida já encerrada cujos resultados foram baixados.</summary>
 public record RecentRaceDto(

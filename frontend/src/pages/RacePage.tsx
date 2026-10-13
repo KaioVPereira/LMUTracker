@@ -52,7 +52,7 @@ export function RacePage() {
           </div>
         </header>
 
-        {r.status !== 'Fetched' && <div className="card pad note">{STATUS_NOTE[r.status] ?? 'Sem resultado ainda.'}</div>}
+        {splits.length === 0 && <div className="card pad note">{STATUS_NOTE[r.status] ?? 'Sem resultado ainda.'}</div>}
 
         {splits.length > 0 && (
           <section aria-labelledby="sec-split">

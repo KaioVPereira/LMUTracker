@@ -16,6 +16,23 @@ export interface AuthResponse {
   user: UserDto
 }
 
+/** Uma sessão do evento: minutos; horário no jogo em minutos desde 0h; céu 0 (limpo) … 10 (tempestade). */
+export interface SessionInfo {
+  kind: 'practice' | 'qualifying' | 'warmup' | 'race' | string
+  minutes: number
+  waitMinutes: number
+  timeOfDay: number
+  sky: number | null
+  temperatureC: number | null
+  rainChance: number | null
+}
+
+export interface EventInfo {
+  sessions: SessionInfo[]
+  fixedSetup: boolean | null
+  maxPlayers: number | null
+}
+
 export interface UpcomingRace {
   eventId: string
   title: string | null
@@ -24,6 +41,8 @@ export interface UpcomingRace {
   eventType: string
   startsAt: string
   endsAt: string
+  /** Só para corridas vistas na agenda a partir do scanner v3. */
+  info: EventInfo | null
 }
 
 export interface RecentRace {
@@ -280,4 +299,76 @@ export interface SearchResults {
   tracks: SearchTrack[]
   cars: SearchCar[]
   races: SearchRace[]
+}
+
+// ---------- tela inicial ----------
+
+export interface LapRecord {
+  track: string
+  carClass: string | null
+  fixedSetup: boolean
+  lapTime: number
+  driverId: string | null
+  driverName: string
+  nationality: string | null
+  car: string | null
+  eventId: string
+  setAt: string
+  splitNo: number
+}
+
+export interface TopSplitWinner {
+  eventId: string
+  title: string | null
+  track: string | null
+  tier: string | null
+  startsAt: string
+  carClass: string | null
+  driverId: string | null
+  driverName: string
+  nationality: string | null
+  car: string | null
+  laps: number
+  splitDrivers: number
+  gapToSecond: number | null
+}
+
+export interface RankClimber {
+  driverId: string | null
+  name: string
+  nationality: string | null
+  races: number
+  driverRankGain: number
+  fromTitle: string | null
+  fromTier: number | null
+  fromProgress: number | null
+  toTitle: string | null
+  toTier: number | null
+  toProgress: number | null
+}
+
+export interface CloseFinish {
+  eventId: string
+  title: string | null
+  track: string | null
+  startsAt: string
+  carClass: string | null
+  gap: number
+  winnerName: string
+  winnerId: string | null
+  secondName: string
+  secondId: string | null
+}
+
+export interface ActiveDriver { driverId: string | null; name: string; nationality: string | null; races: number }
+export interface ClassShare { carClass: string; starts: number }
+
+export interface Home {
+  records: LapRecord[]
+  winners: TopSplitWinner[]
+  climbers: RankClimber[]
+  closeFinishes: CloseFinish[]
+  mostActive: ActiveDriver[]
+  classShare: ClassShare[]
+  generatedAt: string
 }

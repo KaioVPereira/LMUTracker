@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text;
 using LmuTracker.Application.Lmu;
-using LmuTracker.Domain.Entities;
 using LmuTracker.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -57,7 +56,7 @@ public sealed class SearchService : ISearchService
             .ToList();
 
         var races = await _db.ScanEvents.AsNoTracking()
-            .Where(e => e.Status == ScanEventStatus.Fetched && e.Splits.Any()
+            .Where(e => e.Splits.Any()
                         && (EF.Functions.Like(EF.Functions.Collate(e.Title!, AccentInsensitive), like, "\\")
                             || EF.Functions.Like(EF.Functions.Collate(e.Track!, AccentInsensitive), like, "\\")))
             .OrderByDescending(e => e.EventStartsAt ?? e.RaceStartsAt)
@@ -102,7 +101,7 @@ public sealed class SearchService : ISearchService
         {
             entry.AbsoluteExpirationRelativeToNow = CatalogTtl;
             return await _db.ScanEvents.AsNoTracking()
-                .Where(e => e.Status == ScanEventStatus.Fetched && e.Track != null && e.Splits.Any())
+                .Where(e => e.Track != null && e.Splits.Any())
                 .GroupBy(e => e.Track!)
                 .Select(g => new SearchTrackDto(g.Key, g.Count()))
                 .ToListAsync(ct);

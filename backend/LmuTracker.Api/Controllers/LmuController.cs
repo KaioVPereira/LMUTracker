@@ -10,12 +10,19 @@ public class LmuController : ApiControllerBase
 {
     private readonly ILmuQueryService _lmu;
     private readonly ISearchService _search;
+    private readonly IHomeService _home;
 
-    public LmuController(ILmuQueryService lmu, ISearchService search)
+    public LmuController(ILmuQueryService lmu, ISearchService search, IHomeService home)
     {
         _lmu = lmu;
         _search = search;
+        _home = home;
     }
+
+    /// <summary>Destaques da tela inicial (recordes, vencedores, saldo de DR, chegadas apertadas). Cache de 60 s.</summary>
+    [HttpGet("home")]
+    public async Task<ActionResult<HomeDto>> Home(CancellationToken ct)
+        => Ok(await _home.GetAsync(ct));
 
     /// <summary>Busca global (paleta Ctrl+K): pilotos, pistas, carros e corridas.</summary>
     [HttpGet("search")]
