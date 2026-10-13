@@ -41,3 +41,6 @@ frontend/dist/
 Thumbs.db
 .idea/
 *.swp
+
+# Cópias locais do banco de produção (dados pessoais) — nunca versionar
+.local-db/

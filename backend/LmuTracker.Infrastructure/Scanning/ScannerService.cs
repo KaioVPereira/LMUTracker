@@ -19,10 +19,19 @@ public sealed class ScannerService
     private const int MaxSplits = 40; // trava de segurança
 
     /// <summary>
-    /// Versão do que o download grava. 2 = volta a volta, quali e DR/SR do piloto na corrida. Corridas baixadas
-    /// numa versão menor voltam para a fila (enquanto o resultado ainda existir) para ganhar o detalhe novo.
+    /// Versão do que o download grava. 2 = volta a volta, quali e DR/SR do piloto na corrida. 3 = classes da
+    /// corrida e o resto do resultado guardado cru (incidentes, penalidades…). Corridas baixadas numa versão menor
+    /// voltam para a fila (enquanto o resultado ainda existir) para ganhar o detalhe novo.
     /// </summary>
-    private const int CurrentDetailVersion = 2;
+    private const int CurrentDetailVersion = 3;
+
+    // Tetos do JSON cru comprimido — proteção de espaço caso o RaceOS mande algo muito maior que o esperado.
+    private const int MaxConfigBytes = 64 * 1024;
+    private const int MaxSplitExtraBytes = 256 * 1024;
+    private const int MaxRowExtraBytes = 16 * 1024;
+
+    /// <summary>Ordem das classes no site (das mais rápidas para as mais lentas).</summary>
+    private static readonly string[] ClassOrder = { "Hyper", "LMP2", "LMP2_ELMS", "LMP3", "GT3", "LMGT3" };
 
     // O fim "previsto" (raceEndsAt) chega antes do resultado: corrida por tempo termina na volta seguinte e o
     // RaceOS ainda processa. Então esperamos, e um 404 significa "ainda não" — nunca "corrida vazia".
@@ -117,6 +126,10 @@ public sealed class ScannerService
         }
         var raceStarts = e.RaceStartsAt?.ToUniversalTime() ?? eventStarts ?? raceEnds.Value;
 
+        // Configuração inteira (sessões com horário/clima, regras, carros) + o que a instância traz a mais.
+        var configData = JsonBlob.Encode(new { configuration = cfg, instance = JsonBlob.Keep(e.Extra, "configuration") },
+            MaxConfigBytes);
+
         var existing = _db.ScanEvents.Local.FirstOrDefault(x => x.EventId == e.Id)
                        ?? await _db.ScanEvents.FirstOrDefaultAsync(x => x.EventId == e.Id, ct);
         if (existing is null)
@@ -135,6 +148,7 @@ public sealed class ScannerService
                 RaceEndsAt = raceEnds.Value,
                 RaceOsStatus = e.Status,
                 Status = ScanEventStatus.Pending,
+                ConfigData = configData,
             });
             return true;
         }
@@ -150,6 +164,7 @@ public sealed class ScannerService
             if (title is not null) existing.Title = title;
             if (trackName is not null) existing.Track = trackName;
             if (track?.Name is not null) existing.Scene = track.Name;
+            if (configData is not null) existing.ConfigData = configData;
             existing.UpdatedAt = DateTime.UtcNow;
         }
         return false;
@@ -333,6 +348,7 @@ public sealed class ScannerService
         if (old.Count > 0) _db.RaceSplits.RemoveRange(old);
 
         e.TotalSplits = reported;
+        var classes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var (n, result) in results)
         {
             // O resultado é a fonte final de nome, pista e largada — corrige também as corridas gravadas pela
@@ -346,7 +362,20 @@ public sealed class ScannerService
             }
             if (result.Date is { } officialStart) e.EventStartsAt = officialStart.ToUniversalTime();
 
-            var split = new RaceSplit { ScanEventId = e.Id, SplitNo = n };
+            var split = new RaceSplit
+            {
+                ScanEventId = e.Id,
+                SplitNo = n,
+                // Só o que não vai para colunas: drivers/race/qualifying já são gravados; o treino é pesado e não usamos.
+                ExtraData = JsonBlob.Encode(new
+                {
+                    result = JsonBlob.Keep(result.Extra, "practice"),
+                    race = JsonBlob.Keep(result.Race?.Extra),
+                    raceBlock = JsonBlob.Keep(result.Race?.Races.FirstOrDefault()?.Extra),
+                    qualifying = JsonBlob.Keep(result.Qualifying?.Extra),
+                    qualifyingBlock = JsonBlob.Keep(result.Qualifying?.Races.FirstOrDefault()?.Extra),
+                }, MaxSplitExtraBytes),
+            };
             var bySteam = result.Drivers
                 .Where(d => !string.IsNullOrEmpty(d.SteamId))
                 .GroupBy(d => d.SteamId!)
@@ -366,6 +395,8 @@ public sealed class ScannerService
                 bySteam.TryGetValue(r.SteamId ?? "", out var meta);
                 quali.TryGetValue(r.SteamId ?? "", out var q);
                 var laps = ToLaps(r.LapList);
+                if (!string.IsNullOrWhiteSpace(r.CarClass)) classes.Add(r.CarClass);
+                var rowExtra = JsonBlob.Keep(r.Extra);
                 split.Results.Add(new RaceResult
                 {
                     DriverRankTitle = meta?.DriverRank?.Rank,
@@ -379,7 +410,9 @@ public sealed class ScannerService
                     QualiBestLapTime = ParseDouble(q?.BestLapTime),
                     PitStops = laps.Count(l => l.Pit),
                     LapsData = LapCodec.Encode(laps),
-                    SteamId = r.SteamId,
+                    ExtraData = rowExtra is null ? null : JsonBlob.Encode(rowExtra, MaxRowExtraBytes),
+                    // Piloto fora do array drivers chega com SteamId "" — vazio vira null para não juntar todos num só.
+                    SteamId = string.IsNullOrWhiteSpace(r.SteamId) ? null : r.SteamId,
                     RaceOsPlayerId = meta?.NkId ?? r.RaceControlId,
                     Name = r.Name ?? meta?.Name ?? "—",
                     Nationality = meta?.Nationality,
@@ -410,6 +443,7 @@ public sealed class ScannerService
             await UpsertDriversAsync(result.Drivers, e.EventStartsAt ?? e.RaceStartsAt, ct);
         }
 
+        e.Classes = OrderClasses(classes);
         e.Status = ScanEventStatus.Fetched;
         e.DetailVersion = CurrentDetailVersion;
         e.FetchedAt = DateTime.UtcNow;
@@ -437,6 +471,16 @@ public sealed class ScannerService
                 pit));
         }
         return laps;
+    }
+
+    /// <summary>"GT3,Hyper" na ordem do site; classes desconhecidas vão no fim, em ordem alfabética.</summary>
+    private static string? OrderClasses(IEnumerable<string> classes)
+    {
+        var list = classes
+            .OrderBy(c => Array.FindIndex(ClassOrder, o => o.Equals(c, StringComparison.OrdinalIgnoreCase)) is var i && i >= 0 ? i : int.MaxValue)
+            .ThenBy(c => c, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return list.Count > 0 ? string.Join(",", list) : null;
     }
 
     /// <summary>"0,Medium" -> "Medium".</summary>

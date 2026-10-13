@@ -28,6 +28,8 @@ public sealed class RaceOsEvent
     [JsonPropertyName("raceEndsAt")] public DateTime? RaceEndsAt { get; set; }
     [JsonPropertyName("status")] public string? Status { get; set; }
     [JsonPropertyName("configuration")] public EventConfiguration? Configuration { get; set; }
+    /// <summary>Campos que o scanner não lê um a um — guardados crus (ver JsonBlob) para não se perderem.</summary>
+    [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 }
 
 public sealed class EventConfiguration
@@ -40,6 +42,8 @@ public sealed class EventConfiguration
     [JsonPropertyName("content")] public EventContent? Content { get; set; }
     [JsonPropertyName("tier")] public EventTier? Tier { get; set; }
     [JsonPropertyName("sessions")] public List<EventSession>? Sessions { get; set; }
+    /// <summary>Campos que o scanner não lê um a um — guardados crus (ver JsonBlob) para não se perderem.</summary>
+    [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 }
 
 public sealed class EventSession
@@ -47,11 +51,15 @@ public sealed class EventSession
     [JsonPropertyName("type")] public string? Type { get; set; }
     /// <summary>Ex.: "3m", "1h12m30s".</summary>
     [JsonPropertyName("duration")] public string? Duration { get; set; }
+    /// <summary>Campos que o scanner não lê um a um — guardados crus (ver JsonBlob) para não se perderem.</summary>
+    [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 }
 
 public sealed class EventTier
 {
     [JsonPropertyName("name")] public string? Name { get; set; }
+    /// <summary>Campos que o scanner não lê um a um — guardados crus (ver JsonBlob) para não se perderem.</summary>
+    [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 }
 
 /// <summary>Série de <c>special-events/{weekly|special}</c>: um título com várias instâncias em <see cref="Events"/>.</summary>
@@ -79,6 +87,8 @@ public sealed class RaceOsSeries
 public sealed class EventContent
 {
     [JsonPropertyName("track")] public EventTrack? Track { get; set; }
+    /// <summary>Campos que o scanner não lê um a um — guardados crus (ver JsonBlob) para não se perderem.</summary>
+    [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 }
 
 public sealed class EventTrack
@@ -88,6 +98,8 @@ public sealed class EventTrack
 
     /// <summary>Nome "amigável" — às vezes limpo ("Monza"), às vezes com sufixo interno ("FujiWEC_2023").</summary>
     [JsonPropertyName("friendly")] public string? Friendly { get; set; }
+    /// <summary>Campos que o scanner não lê um a um — guardados crus (ver JsonBlob) para não se perderem.</summary>
+    [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 }
 
 public sealed class OverviewResult
@@ -112,6 +124,8 @@ public sealed class SplitResult
     [JsonPropertyName("drivers")] public List<ResultDriver> Drivers { get; set; } = new();
     [JsonPropertyName("qualifying")] public SessionWrapper? Qualifying { get; set; }
     [JsonPropertyName("race")] public SessionWrapper? Race { get; set; }
+    /// <summary>Campos que o scanner não lê um a um — guardados crus (ver JsonBlob) para não se perderem.</summary>
+    [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 }
 
 /// <summary>Entrada do array <c>drivers</c>: identidade + variação de rating na corrida.</summary>
@@ -142,12 +156,16 @@ public sealed class RankInfo
 public sealed class SessionWrapper
 {
     [JsonPropertyName("races")] public List<RaceBlock> Races { get; set; } = new();
+    /// <summary>Campos que o scanner não lê um a um — guardados crus (ver JsonBlob) para não se perderem.</summary>
+    [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 }
 
 public sealed class RaceBlock
 {
     [JsonPropertyName("mostLapsCompleted")] public int MostLapsCompleted { get; set; }
     [JsonPropertyName("results")] public List<ResultRow> Results { get; set; } = new();
+    /// <summary>Campos que o scanner não lê um a um — guardados crus (ver JsonBlob) para não se perderem.</summary>
+    [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 }
 
 /// <summary>Linha de classificação de um piloto no split.</summary>
@@ -173,6 +191,8 @@ public sealed class ResultRow
 
     /// <summary>Volta a volta. Mesmo objeto tem "Laps" (número) — por isso o JSON é lido com nomes exatos.</summary>
     [JsonPropertyName("laps")] public List<LapRow>? LapList { get; set; }
+    /// <summary>Campos que o scanner não lê um a um — guardados crus (ver JsonBlob) para não se perderem.</summary>
+    [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 }
 
 /// <summary>Aceita texto, número ou null e entrega texto — o RaceOS manda números como texto, mas não é garantido.</summary>

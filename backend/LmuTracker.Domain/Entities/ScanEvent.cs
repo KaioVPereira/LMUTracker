@@ -68,6 +68,15 @@ public class ScanEvent : Entity
     /// </summary>
     public int DetailVersion { get; set; }
 
+    /// <summary>Classes que correram (ex.: "Hyper,GT3"), na ordem fixa do site — base dos filtros por classe.</summary>
+    public string? Classes { get; set; }
+
+    /// <summary>
+    /// Configuração do evento como veio da agenda (sessões com horário no jogo e clima, regras, carros),
+    /// JSON comprimido. Só existe para corridas vistas na agenda a partir do scanner v3.
+    /// </summary>
+    public byte[]? ConfigData { get; set; }
+
     public DateTime FirstSeenAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<RaceSplit> Splits { get; set; } = new List<RaceSplit>();

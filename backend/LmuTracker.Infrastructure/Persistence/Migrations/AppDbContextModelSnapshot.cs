@@ -124,6 +124,9 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
                     b.Property<string>("DriverRankTitle")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<byte[]>("ExtraData")
+                        .HasColumnType("varbinary(max)");
+
                     b.Property<string>("FinishStatus")
                         .HasColumnType("nvarchar(max)");
 
@@ -220,6 +223,9 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
                     b.Property<int>("DriverCount")
                         .HasColumnType("int");
 
+                    b.Property<byte[]>("ExtraData")
+                        .HasColumnType("varbinary(max)");
+
                     b.Property<int>("MostLapsCompleted")
                         .HasColumnType("int");
 
@@ -245,6 +251,13 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Classes")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<byte[]>("ConfigData")
+                        .HasColumnType("varbinary(max)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");

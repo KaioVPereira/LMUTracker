@@ -68,4 +68,7 @@ public class RaceResult : Entity
     /// comprimido com gzip — ~1 KB por piloto. Ver LapCodec. Null em resultados gravados antes disso.
     /// </summary>
     public byte[]? LapsData { get; set; }
+
+    /// <summary>Campos da linha do piloto que o scanner não lê um a um (penalidades etc.), crus e comprimidos.</summary>
+    public byte[]? ExtraData { get; set; }
 }

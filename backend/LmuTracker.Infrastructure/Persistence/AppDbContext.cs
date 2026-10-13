@@ -41,6 +41,7 @@ public class AppDbContext : DbContext
             e.Property(x => x.SeriesId).HasMaxLength(64);
             e.Property(x => x.EventType).HasMaxLength(32);
             e.Property(x => x.Tier).HasMaxLength(32);
+            e.Property(x => x.Classes).HasMaxLength(64);
             e.HasMany(x => x.Splits).WithOne(s => s.ScanEvent)
                 .HasForeignKey(s => s.ScanEventId).OnDelete(DeleteBehavior.Cascade);
         });
