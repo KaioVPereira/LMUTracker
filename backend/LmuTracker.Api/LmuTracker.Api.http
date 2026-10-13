@@ -1,0 +1,6 @@
+@LmuTracker.Api_HostAddress = http://localhost:5173
+
+GET {{LmuTracker.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

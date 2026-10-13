@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="LmuTracker.Api/LmuTracker.Api.csproj" />
+  <Project Path="LmuTracker.Application/LmuTracker.Application.csproj" />
+  <Project Path="LmuTracker.Domain/LmuTracker.Domain.csproj" />
+  <Project Path="LmuTracker.Infrastructure/LmuTracker.Infrastructure.csproj" />
+  <Project Path="LmuTracker.Worker/LmuTracker.Worker.csproj" />
+</Solution>

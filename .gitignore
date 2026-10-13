@@ -1,0 +1,42 @@
+# ---- .NET build ----
+bin/
+obj/
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+.vs/
+artifacts/
+
+# ---- Segredos / sessão (NUNCA versionar) ----
+# Refresh token da conta de serviço Steam
+steam-session*.json
+# Overrides locais e de produção com segredos
+appsettings.*.Local.json
+appsettings.Local.json
+appsettings.Production.json
+*.secret.json
+.env
+.env.*
+
+# ---- Banco local / dumps ----
+*.mdf
+*.ldf
+*.db
+*.db-shm
+*.db-wal
+
+# ---- Logs / temporários ----
+*.log
+logs/
+
+# ---- Frontend (quando entrar) ----
+node_modules/
+frontend/dist/
+.vite/
+
+# ---- SO / editor ----
+.DS_Store
+Thumbs.db
+.idea/
+*.swp

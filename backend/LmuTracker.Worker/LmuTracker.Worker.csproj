@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>dotnet-LmuTracker.Worker-e1e5b62f-d688-4c53-a833-33f17e4baa06</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.9" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LmuTracker.Infrastructure\LmuTracker.Infrastructure.csproj" />
+    <ProjectReference Include="..\LmuTracker.Application\LmuTracker.Application.csproj" />
+    <ProjectReference Include="..\LmuTracker.Domain\LmuTracker.Domain.csproj" />
+  </ItemGroup>
+</Project>
