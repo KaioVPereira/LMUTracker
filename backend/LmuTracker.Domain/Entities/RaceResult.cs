@@ -46,4 +46,26 @@ public class RaceResult : Entity
     public int? DriverRankAdjustment { get; set; }
     public int? SafetyRankAdjustment { get; set; }
     public bool JokerPlayed { get; set; }
+
+    // ---------- Rating do piloto NESTA corrida (retrato público: rank, tier, progresso arredondado) ----------
+    public string? DriverRankTitle { get; set; }
+    public int? DriverRankTier { get; set; }
+    public int? DriverRankProgress { get; set; }
+    public string? SafetyRankTitle { get; set; }
+    public int? SafetyRankTier { get; set; }
+    public int? SafetyRankProgress { get; set; }
+
+    // ---------- Quali ----------
+    public int? QualiPosition { get; set; }
+    public int? QualiClassPosition { get; set; }
+    public double? QualiBestLapTime { get; set; }
+
+    // ---------- Volta a volta ----------
+    public int PitStops { get; set; }
+
+    /// <summary>
+    /// Voltas da corrida (tempo, setores, posição, combustível, pneus, desgaste, pit) em JSON compacto
+    /// comprimido com gzip — ~1 KB por piloto. Ver LapCodec. Null em resultados gravados antes disso.
+    /// </summary>
+    public byte[]? LapsData { get; set; }
 }

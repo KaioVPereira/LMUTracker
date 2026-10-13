@@ -15,7 +15,14 @@ namespace LmuTracker.Infrastructure.Scanning;
 public sealed class ScannerService
 {
     private static readonly string[] Tiers = { "beginner", "intermediate", "advanced" };
+    private static readonly string[] SpecialKinds = { "weekly" }; // "special" (eventos especiais) é o mesmo formato
     private const int MaxSplits = 40; // trava de segurança
+
+    /// <summary>
+    /// Versão do que o download grava. 2 = volta a volta, quali e DR/SR do piloto na corrida. Corridas baixadas
+    /// numa versão menor voltam para a fila (enquanto o resultado ainda existir) para ganhar o detalhe novo.
+    /// </summary>
+    private const int CurrentDetailVersion = 2;
 
     // O fim "previsto" (raceEndsAt) chega antes do resultado: corrida por tempo termina na volta seguinte e o
     // RaceOS ainda processa. Então esperamos, e um 404 significa "ainda não" — nunca "corrida vazia".
@@ -49,60 +56,115 @@ public sealed class ScannerService
     public async Task DiscoverAsync(CancellationToken ct)
     {
         var found = 0;
+
+        // Diárias: a próxima leva de cada nível (uma corrida a cada 15/20/30 min).
         foreach (var tier in Tiers)
         {
             var events = await _raceos.ListTierAsync(tier, take: 8, ct);
             foreach (var e in events)
+                if (await UpsertEventAsync(e, tier, "daily", ct)) found++;
+        }
+        if (_db.ChangeTracker.HasChanges()) await _db.SaveChangesAsync(ct);
+
+        // Semanais: isoladas — se o formato vier diferente, só elas falham e as diárias seguem normais.
+        foreach (var kind in SpecialKinds)
+        {
+            try
             {
-                if (string.IsNullOrWhiteSpace(e.Id)) continue;
-
-                // Nome, largada oficial e pista vêm da configuração de cada corrida (é o que o jogo mostra).
-                var cfg = e.Configuration;
-                var track = cfg?.Content?.Track;
-                var title = cfg?.Title;
-                var trackName = TrackNames.Display(track?.Friendly, track?.Name);
-                var eventStarts = cfg?.Starts?.ToUniversalTime();
-
-                var existing = await _db.ScanEvents.FirstOrDefaultAsync(x => x.EventId == e.Id, ct);
-                if (existing is null)
-                {
-                    _db.ScanEvents.Add(new ScanEvent
-                    {
-                        EventId = e.Id,
-                        SeriesId = e.SeriesId ?? "",
-                        Title = title,
-                        Track = trackName,
-                        Scene = track?.Name,
-                        EventType = e.Type ?? "daily",
-                        Tier = tier,
-                        EventStartsAt = eventStarts,
-                        RaceStartsAt = (e.RaceStartsAt ?? DateTime.UtcNow).ToUniversalTime(),
-                        RaceEndsAt = (e.RaceEndsAt ?? DateTime.UtcNow).ToUniversalTime(),
-                        RaceOsStatus = e.Status,
-                        Status = ScanEventStatus.Pending,
-                    });
-                    found++;
-                }
-                else if (existing.Status == ScanEventStatus.Pending)
-                {
-                    // Ainda não baixado: atualiza estado e horários. Nome/pista são sobrescritos de propósito:
-                    // uma versão anterior do scanner gravou nomes errados (cruzava pelo seriesId).
-                    existing.RaceOsStatus = e.Status;
-                    if (e.RaceStartsAt is { } starts) existing.RaceStartsAt = starts.ToUniversalTime();
-                    if (e.RaceEndsAt is { } ends) existing.RaceEndsAt = ends.ToUniversalTime();
-                    if (eventStarts is not null) existing.EventStartsAt = eventStarts;
-                    if (title is not null) existing.Title = title;
-                    if (trackName is not null) existing.Track = trackName;
-                    if (track?.Name is not null) existing.Scene = track.Name;
-                    existing.UpdatedAt = DateTime.UtcNow;
-                }
+                var series = await _raceos.ListSpecialAsync(kind, ct);
+                var weekly = 0;
+                foreach (var s in series)
+                    foreach (var e in s.Events)
+                        if (await UpsertEventAsync(e, e.Configuration?.Tier?.Name ?? s.Tier ?? kind, kind, ct, s.Title))
+                            weekly++;
+                if (_db.ChangeTracker.HasChanges()) await _db.SaveChangesAsync(ct);
+                found += weekly;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                DiscardPendingChanges();
+                _log.LogWarning(ex, "Scanner: não consegui ler os eventos '{Kind}'; diárias seguem normais.", kind);
             }
         }
 
-        if (_db.ChangeTracker.HasChanges())
-            await _db.SaveChangesAsync(ct);
         if (found > 0)
             _log.LogInformation("Scanner: {Count} novas corridas na agenda guardadas.", found);
+    }
+
+    /// <summary>Grava (ou atualiza, se ainda pendente) uma corrida descoberta. Devolve true se for nova.</summary>
+    private async Task<bool> UpsertEventAsync(
+        RaceOsEvent e, string tier, string defaultType, CancellationToken ct, string? seriesTitle = null)
+    {
+        if (string.IsNullOrWhiteSpace(e.Id)) return false;
+
+        // Nome, largada oficial e pista vêm da configuração de cada corrida (é o que o jogo mostra).
+        var cfg = e.Configuration;
+        var track = cfg?.Content?.Track;
+        var title = cfg?.Title ?? seriesTitle;
+        var trackName = TrackNames.Display(track?.Friendly, track?.Name);
+        var eventStarts = cfg?.Starts?.ToUniversalTime();
+
+        // Sem horário de sessão de corrida (comum fora das diárias): fim = largada + duração das sessões,
+        // como o jogo calcula. Sem nem isso, não dá para saber quando baixar — ignora.
+        var raceEnds = e.RaceEndsAt?.ToUniversalTime()
+            ?? (eventStarts is { } st ? st.AddMinutes(SessionMinutes(cfg)) : null);
+        if (raceEnds is null)
+        {
+            _log.LogWarning("Scanner: corrida {Event} sem horário de fim; ignorada.", e.Id);
+            return false;
+        }
+        var raceStarts = e.RaceStartsAt?.ToUniversalTime() ?? eventStarts ?? raceEnds.Value;
+
+        var existing = _db.ScanEvents.Local.FirstOrDefault(x => x.EventId == e.Id)
+                       ?? await _db.ScanEvents.FirstOrDefaultAsync(x => x.EventId == e.Id, ct);
+        if (existing is null)
+        {
+            _db.ScanEvents.Add(new ScanEvent
+            {
+                EventId = e.Id,
+                SeriesId = e.SeriesId ?? "",
+                Title = title,
+                Track = trackName,
+                Scene = track?.Name,
+                EventType = e.Type ?? defaultType,
+                Tier = tier,
+                EventStartsAt = eventStarts,
+                RaceStartsAt = raceStarts,
+                RaceEndsAt = raceEnds.Value,
+                RaceOsStatus = e.Status,
+                Status = ScanEventStatus.Pending,
+            });
+            return true;
+        }
+
+        if (existing.Status == ScanEventStatus.Pending)
+        {
+            // Ainda não baixado: atualiza estado e horários. Nome/pista são sobrescritos de propósito:
+            // uma versão anterior do scanner gravou nomes errados (cruzava pelo seriesId).
+            existing.RaceOsStatus = e.Status;
+            existing.RaceStartsAt = raceStarts;
+            existing.RaceEndsAt = raceEnds.Value;
+            if (eventStarts is not null) existing.EventStartsAt = eventStarts;
+            if (title is not null) existing.Title = title;
+            if (trackName is not null) existing.Track = trackName;
+            if (track?.Name is not null) existing.Scene = track.Name;
+            existing.UpdatedAt = DateTime.UtcNow;
+        }
+        return false;
+    }
+
+    /// <summary>Duração total do evento em minutos: soma das sessões + 5 (mesma conta do jogo).</summary>
+    private static double SessionMinutes(EventConfiguration? cfg)
+    {
+        var total = 0.0;
+        foreach (var s in cfg?.Sessions ?? new())
+            foreach (System.Text.RegularExpressions.Match m in
+                     System.Text.RegularExpressions.Regex.Matches(s.Duration ?? "", @"(\d+)([hms])"))
+            {
+                var v = int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture);
+                total += m.Groups[2].Value switch { "h" => v * 60, "m" => v, _ => v / 60.0 };
+            }
+        return total + 5;
     }
 
     // ---------- 2) Expansão: baixar resultados das que terminaram ----------
@@ -113,6 +175,7 @@ public sealed class ScannerService
         var readyAfter = now - FirstFetchDelay;
 
         await RequeueBrokenAsync(now, ct);
+        await RequeueForDetailsAsync(now, ct);
 
         // Pendentes cujo fim previsto já passou (com folga) entram na fila.
         var toReady = await _db.ScanEvents
@@ -267,11 +330,30 @@ public sealed class ScannerService
             var rows = result.Race?.Races.FirstOrDefault();
             split.MostLapsCompleted = rows?.MostLapsCompleted ?? 0;
 
+            // Quali do mesmo split, por SteamID (posição geral, na classe e melhor volta).
+            var quali = (result.Qualifying?.Races.FirstOrDefault()?.Results ?? new())
+                .Where(q => !string.IsNullOrEmpty(q.SteamId))
+                .GroupBy(q => q.SteamId!)
+                .ToDictionary(g => g.Key, g => g.First());
+
             foreach (var r in rows?.Results ?? new())
             {
                 bySteam.TryGetValue(r.SteamId ?? "", out var meta);
+                quali.TryGetValue(r.SteamId ?? "", out var q);
+                var laps = ToLaps(r.LapList);
                 split.Results.Add(new RaceResult
                 {
+                    DriverRankTitle = meta?.DriverRank?.Rank,
+                    DriverRankTier = meta?.DriverRank?.Tier,
+                    DriverRankProgress = RoundProgress(meta?.DriverRank?.Progress),
+                    SafetyRankTitle = meta?.SafetyRank?.Rank,
+                    SafetyRankTier = meta?.SafetyRank?.Tier,
+                    SafetyRankProgress = RoundProgress(meta?.SafetyRank?.Progress),
+                    QualiPosition = ParseInt(q?.Position),
+                    QualiClassPosition = ParseInt(q?.ClassPosition),
+                    QualiBestLapTime = ParseDouble(q?.BestLapTime),
+                    PitStops = laps.Count(l => l.Pit),
+                    LapsData = LapCodec.Encode(laps),
                     SteamId = r.SteamId,
                     RaceOsPlayerId = meta?.NkId ?? r.RaceControlId,
                     Name = r.Name ?? meta?.Name ?? "—",
@@ -300,10 +382,11 @@ public sealed class ScannerService
             split.DriverCount = split.Results.Count;
             _db.RaceSplits.Add(split);
 
-            await UpsertDriversAsync(result.Drivers, ct);
+            await UpsertDriversAsync(result.Drivers, e.EventStartsAt ?? e.RaceStartsAt, ct);
         }
 
         e.Status = ScanEventStatus.Fetched;
+        e.DetailVersion = CurrentDetailVersion;
         e.FetchedAt = DateTime.UtcNow;
         e.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
@@ -312,7 +395,63 @@ public sealed class ScannerService
         return FetchOutcome.Fetched;
     }
 
-    private async Task UpsertDriversAsync(IEnumerable<ResultDriver> drivers, CancellationToken ct)
+    /// <summary>Converte o volta a volta do RaceOS (tudo em texto) para o formato guardado.</summary>
+    private static List<Application.Lmu.LapDto> ToLaps(List<LapRow>? rows)
+    {
+        var laps = new List<Application.Lmu.LapDto>();
+        foreach (var l in rows ?? new())
+        {
+            var n = ParseInt(l.Num);
+            if (n is null) continue;
+            var pit = !string.IsNullOrWhiteSpace(l.Pit) && l.Pit.Trim() != "0";
+            laps.Add(new Application.Lmu.LapDto(
+                n.Value, ParseInt(l.Position), ParseDouble(l.LapTime),
+                ParseDouble(l.S1), ParseDouble(l.S2), ParseDouble(l.S3), ParseDouble(l.Elapsed),
+                ParseFraction(l.Fuel), Compound(l.FrontCompound), Compound(l.RearCompound),
+                ParseFraction(l.WearFL), ParseFraction(l.WearFR), ParseFraction(l.WearRL), ParseFraction(l.WearRR),
+                pit));
+        }
+        return laps;
+    }
+
+    /// <summary>"0,Medium" -> "Medium".</summary>
+    private static string? Compound(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var i = raw.IndexOf(',');
+        return (i >= 0 ? raw[(i + 1)..] : raw).Trim();
+    }
+
+    /// <summary>Fração 0..1 (combustível, desgaste). Aceita zero, ao contrário de ParseDouble.</summary>
+    private static double? ParseFraction(string? s) =>
+        double.TryParse((s ?? "").Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : null;
+
+    private static int? RoundProgress(double? p) => p is null ? null : (int)Math.Round(p.Value);
+
+    /// <summary>
+    /// Corridas baixadas antes do volta a volta existir voltam para a fila uma vez, enquanto o RaceOS ainda
+    /// tem o resultado — ganham voltas, quali e DR/SR por corrida sem perder nada (o download é tudo ou nada).
+    /// </summary>
+    private async Task RequeueForDetailsAsync(DateTime now, CancellationToken ct)
+    {
+        var stale = await _db.ScanEvents
+            .Where(x => x.Status == ScanEventStatus.Fetched
+                        && x.DetailVersion < CurrentDetailVersion
+                        && x.TotalSplits > 0
+                        && x.RaceEndsAt > now.AddDays(-2))
+            .ToListAsync(ct);
+        if (stale.Count == 0) return;
+
+        foreach (var e in stale)
+        {
+            e.Status = ScanEventStatus.Ready;
+            e.FetchAttempts = 0;
+        }
+        await _db.SaveChangesAsync(ct);
+        _log.LogInformation("Scanner: {Count} corridas voltaram para a fila para ganhar o volta a volta.", stale.Count);
+    }
+
+    private async Task UpsertDriversAsync(IEnumerable<ResultDriver> drivers, DateTime raceTime, CancellationToken ct)
     {
         foreach (var d in drivers)
         {
@@ -321,20 +460,27 @@ public sealed class ScannerService
             // aparece na consulta ao banco, e incluí-lo de novo quebraria o índice único de SteamId.
             var drv = _db.Drivers.Local.FirstOrDefault(x => x.SteamId == d.SteamId)
                       ?? await _db.Drivers.FirstOrDefaultAsync(x => x.SteamId == d.SteamId, ct);
+            var isNew = drv is null;
             if (drv is null)
             {
-                drv = new Driver { SteamId = d.SteamId! };
+                drv = new Driver { SteamId = d.SteamId!, Name = d.Name ?? "—", LastSeenAt = raceTime };
                 _db.Drivers.Add(drv);
             }
+            // O retrato (nome, rank) só avança: uma corrida mais antiga reprocessada depois não pode
+            // sobrescrever o rank de uma mais nova. LastSeenAt guarda a largada da corrida do retrato.
+            if (!isNew && raceTime < drv.LastSeenAt) continue;
+
             drv.RaceOsPlayerId = d.NkId ?? d.RaceControlId ?? drv.RaceOsPlayerId;
             drv.Name = d.Name ?? drv.Name ?? "—";
             drv.Nationality = d.Nationality ?? drv.Nationality;
             drv.Badge = d.Badge ?? drv.Badge;
             drv.DriverRankTitle = d.DriverRank?.Rank ?? drv.DriverRankTitle;
             drv.DriverRankTier = d.DriverRank?.Tier ?? drv.DriverRankTier;
+            drv.DriverRankProgress = RoundProgress(d.DriverRank?.Progress) ?? drv.DriverRankProgress;
             drv.SafetyRankTitle = d.SafetyRank?.Rank ?? drv.SafetyRankTitle;
             drv.SafetyRankTier = d.SafetyRank?.Tier ?? drv.SafetyRankTier;
-            drv.LastSeenAt = DateTime.UtcNow;
+            drv.SafetyRankProgress = RoundProgress(d.SafetyRank?.Progress) ?? drv.SafetyRankProgress;
+            drv.LastSeenAt = raceTime;
             drv.UpdatedAt = DateTime.UtcNow;
         }
     }

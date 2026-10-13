@@ -2,6 +2,7 @@ namespace LmuTracker.Application.Lmu;
 
 /// <summary>Uma corrida do piloto vinculado, achada nas corridas varridas.</summary>
 public record MyResultDto(
+    Guid ResultId,
     string EventId, string? Title, string? Track, string? Tier, DateTime StartsAt, int SplitNo,
     string? CarClass, string? VehName, int? GridPos, int? ClassGridPos, int? Position, int? ClassPosition, int Laps,
     double? BestLapTime, string? FinishStatus, int? DriverRankAdjustment, int? SafetyRankAdjustment);
@@ -14,6 +15,7 @@ public record MyDriverDto(
     bool Linked,
     bool Found,
     string? SteamId,
+    Guid? DriverId,
     string? Name,
     string? Nationality,
     string? Badge,

@@ -15,7 +15,9 @@ public sealed class RaceOsClient
 {
     // Nomes exatos (todos os DTOs têm JsonPropertyName). NÃO ligar case-insensitive: o resultado traz "Laps"
     // (número de voltas) e "laps" (lista volta a volta) no mesmo objeto, e eles colidiriam.
-    private static readonly JsonSerializerOptions Json = new();
+    // Campos de texto aceitam número também (FlexibleStringConverter): o RaceOS manda números como texto,
+    // mas uma mudança no formato não pode derrubar a leitura do resultado inteiro.
+    internal static readonly JsonSerializerOptions Json = new() { Converters = { new FlexibleStringConverter() } };
 
     private readonly IHttpClientFactory _factory;
     private readonly ISteamTicketProvider _ticket;
@@ -104,6 +106,15 @@ public sealed class RaceOsClient
             return Array.Empty<RaceOsEvent>();
         }
         return await resp.Content.ReadFromJsonAsync<List<RaceOsEvent>>(Json, ct) ?? new();
+    }
+
+    /// <summary>Séries de <c>special-events/{kind}</c> (kind = weekly | special), cada uma com suas instâncias.</summary>
+    public async Task<IReadOnlyList<RaceOsSeries>> ListSpecialAsync(string kind, CancellationToken ct)
+    {
+        using var resp = await SendAsync(HttpMethod.Get, $"/api/v1/special-events/{kind}", null, ct);
+        if (!resp.IsSuccessStatusCode)
+            throw new InvalidOperationException($"special-events/{kind} => HTTP {(int)resp.StatusCode}");
+        return await resp.Content.ReadFromJsonAsync<List<RaceOsSeries>>(Json, ct) ?? new();
     }
 
     // ---------- Expansão ----------

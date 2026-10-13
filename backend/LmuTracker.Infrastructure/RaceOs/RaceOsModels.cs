@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace LmuTracker.Infrastructure.RaceOs;
@@ -35,6 +36,30 @@ public sealed class EventConfiguration
     [JsonPropertyName("starts")] public DateTime? Starts { get; set; }
 
     [JsonPropertyName("content")] public EventContent? Content { get; set; }
+    [JsonPropertyName("tier")] public EventTier? Tier { get; set; }
+    [JsonPropertyName("sessions")] public List<EventSession>? Sessions { get; set; }
+}
+
+public sealed class EventSession
+{
+    [JsonPropertyName("type")] public string? Type { get; set; }
+    /// <summary>Ex.: "3m", "1h12m30s".</summary>
+    [JsonPropertyName("duration")] public string? Duration { get; set; }
+}
+
+public sealed class EventTier
+{
+    [JsonPropertyName("name")] public string? Name { get; set; }
+}
+
+/// <summary>Série de <c>special-events/{weekly|special}</c>: um título com várias instâncias em <see cref="Events"/>.</summary>
+public sealed class RaceOsSeries
+{
+    [JsonPropertyName("seriesId")] public string? SeriesId { get; set; }
+    [JsonPropertyName("title")] public string? Title { get; set; }
+    [JsonPropertyName("tier")] public string? Tier { get; set; }
+    [JsonPropertyName("type")] public string? Type { get; set; }
+    [JsonPropertyName("events")] public List<RaceOsEvent> Events { get; set; } = new();
 }
 
 public sealed class EventContent
@@ -71,6 +96,7 @@ public sealed class SplitResult
     [JsonPropertyName("tier")] public string? Tier { get; set; }
     [JsonPropertyName("official")] public bool Official { get; set; }
     [JsonPropertyName("drivers")] public List<ResultDriver> Drivers { get; set; } = new();
+    [JsonPropertyName("qualifying")] public SessionWrapper? Qualifying { get; set; }
     [JsonPropertyName("race")] public SessionWrapper? Race { get; set; }
 }
 
@@ -95,6 +121,8 @@ public sealed class RankInfo
 {
     [JsonPropertyName("rank")] public string? Rank { get; set; }
     [JsonPropertyName("tier")] public int Tier { get; set; }
+    /// <summary>Progresso até o próximo tier (na visão pública vem arredondado, de 10 em 10).</summary>
+    [JsonPropertyName("progress")] public double? Progress { get; set; }
 }
 
 public sealed class SessionWrapper
@@ -128,4 +156,53 @@ public sealed class ResultRow
     [JsonPropertyName("Laps")] public int Laps { get; set; }
     [JsonPropertyName("finishStatus")] public string? FinishStatus { get; set; }
     [JsonPropertyName("points")] public int Points { get; set; }
+
+    /// <summary>Volta a volta. Mesmo objeto tem "Laps" (número) — por isso o JSON é lido com nomes exatos.</summary>
+    [JsonPropertyName("laps")] public List<LapRow>? LapList { get; set; }
+}
+
+/// <summary>Aceita texto, número ou null e entrega texto — o RaceOS manda números como texto, mas não é garantido.</summary>
+public sealed class FlexibleStringConverter : JsonConverter<string?>
+{
+    public override string? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        reader.TokenType switch
+        {
+            JsonTokenType.String => reader.GetString(),
+            JsonTokenType.Number => reader.TryGetDecimal(out var d)
+                ? d.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                : reader.GetDouble().ToString(System.Globalization.CultureInfo.InvariantCulture),
+            JsonTokenType.True => "1",
+            JsonTokenType.False => "",
+            JsonTokenType.Null => null,
+            _ => SkipAndNull(ref reader),
+        };
+
+    private static string? SkipAndNull(ref Utf8JsonReader reader)
+    {
+        reader.Skip();
+        return null;
+    }
+
+    public override void Write(Utf8JsonWriter writer, string? value, JsonSerializerOptions options) =>
+        writer.WriteStringValue(value);
+}
+
+/// <summary>Uma volta do piloto. O RaceOS manda tudo como texto (números inclusive).</summary>
+public sealed class LapRow
+{
+    [JsonPropertyName("num")] public string? Num { get; set; }
+    [JsonPropertyName("p")] public string? Position { get; set; }
+    [JsonPropertyName("et")] public string? Elapsed { get; set; }
+    [JsonPropertyName("lapTime")] public string? LapTime { get; set; }
+    [JsonPropertyName("s1")] public string? S1 { get; set; }
+    [JsonPropertyName("s2")] public string? S2 { get; set; }
+    [JsonPropertyName("s3")] public string? S3 { get; set; }
+    [JsonPropertyName("fuel")] public string? Fuel { get; set; }
+    [JsonPropertyName("fcompound")] public string? FrontCompound { get; set; }
+    [JsonPropertyName("rcompound")] public string? RearCompound { get; set; }
+    [JsonPropertyName("twfl")] public string? WearFL { get; set; }
+    [JsonPropertyName("twfr")] public string? WearFR { get; set; }
+    [JsonPropertyName("twrl")] public string? WearRL { get; set; }
+    [JsonPropertyName("twrr")] public string? WearRR { get; set; }
+    [JsonPropertyName("pit")] public string? Pit { get; set; }
 }

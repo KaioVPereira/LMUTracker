@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link, NavLink } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { initials } from '../lib/format'
 
@@ -18,6 +18,12 @@ export function TopBar() {
     <header className="bar">
       <div className="bar-in">
         <Logo />
+        {user && (
+          <nav className="nav" aria-label="Principal">
+            <NavLink to="/" end>Painel</NavLink>
+            <NavLink to="/corridas">Corridas</NavLink>
+          </nav>
+        )}
         {user && (
           <div className="bar-right">
             <span className="user-chip">

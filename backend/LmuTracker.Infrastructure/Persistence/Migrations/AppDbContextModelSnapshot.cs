@@ -34,6 +34,9 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<int?>("DriverRankProgress")
+                        .HasColumnType("int");
+
                     b.Property<int?>("DriverRankTier")
                         .HasColumnType("int");
 
@@ -53,6 +56,9 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("RaceOsPlayerId")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<int?>("SafetyRankProgress")
+                        .HasColumnType("int");
 
                     b.Property<int?>("SafetyRankTier")
                         .HasColumnType("int");
@@ -109,6 +115,15 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
                     b.Property<int?>("DriverRankAdjustment")
                         .HasColumnType("int");
 
+                    b.Property<int?>("DriverRankProgress")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("DriverRankTier")
+                        .HasColumnType("int");
+
+                    b.Property<string>("DriverRankTitle")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("FinishStatus")
                         .HasColumnType("nvarchar(max)");
 
@@ -124,6 +139,9 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
                     b.Property<int>("Laps")
                         .HasColumnType("int");
 
+                    b.Property<byte[]>("LapsData")
+                        .HasColumnType("varbinary(max)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(96)
@@ -132,10 +150,22 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
                     b.Property<string>("Nationality")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int>("PitStops")
+                        .HasColumnType("int");
+
                     b.Property<int>("Points")
                         .HasColumnType("int");
 
                     b.Property<int?>("Position")
+                        .HasColumnType("int");
+
+                    b.Property<double?>("QualiBestLapTime")
+                        .HasColumnType("float");
+
+                    b.Property<int?>("QualiClassPosition")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("QualiPosition")
                         .HasColumnType("int");
 
                     b.Property<string>("RaceOsPlayerId")
@@ -146,6 +176,15 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
 
                     b.Property<int?>("SafetyRankAdjustment")
                         .HasColumnType("int");
+
+                    b.Property<int?>("SafetyRankProgress")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("SafetyRankTier")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SafetyRankTitle")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("SteamId")
                         .HasMaxLength(20)
@@ -209,6 +248,9 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<int>("DetailVersion")
+                        .HasColumnType("int");
 
                     b.Property<string>("EventId")
                         .IsRequired()

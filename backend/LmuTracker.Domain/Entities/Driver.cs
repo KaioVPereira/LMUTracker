@@ -21,8 +21,10 @@ public class Driver : Entity
     // ---------- Último retrato público do rating ----------
     public string? DriverRankTitle { get; set; }   // Bronze/Silver/Gold/Platinum
     public int? DriverRankTier { get; set; }
+    public int? DriverRankProgress { get; set; }
     public string? SafetyRankTitle { get; set; }
     public int? SafetyRankTier { get; set; }
+    public int? SafetyRankProgress { get; set; }
 
     /// <summary>Quando esse retrato foi visto pela última vez numa corrida.</summary>
     public DateTime LastSeenAt { get; set; } = DateTime.UtcNow;

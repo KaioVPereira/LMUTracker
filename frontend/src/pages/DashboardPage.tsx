@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { api, ApiError } from '../api/client'
 import type { MyDriver, Overview, UserDto } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
+import { TierChip } from '../components/Bits'
 import { TopBar } from '../components/TopBar'
 import {
   badgeLabel, classLabel, fmtDateTime, fmtDelta, fmtInt, fmtLap, fmtRelative, fmtTime, parseUtc,
-  rankClass, tierLabel, typeLabel,
+  rankClass, typeLabel,
 } from '../lib/format'
 
 const REFRESH_MS = 60_000
@@ -107,9 +108,9 @@ export function DashboardPage() {
                 {overview?.upcoming.length ? overview.upcoming.map((r) => {
                   const live = parseUtc(r.startsAt).getTime() <= now && now < parseUtc(r.endsAt).getTime()
                   return (
-                    <tr key={r.eventId}>
+                    <tr key={r.eventId} className="row-link" onClick={() => navigate(`/corridas/${r.eventId}`)}>
                       <td className="mono">{fmtTime(r.startsAt)}</td>
-                      <td>{r.title ?? 'Corrida diária'}</td>
+                      <td><Link to={`/corridas/${r.eventId}`} onClick={(e) => e.stopPropagation()}>{r.title ?? 'Corrida diária'}</Link></td>
                       <td>{r.track ?? '—'}</td>
                       <td><TierChip tier={r.tier} /></td>
                       <td>{typeLabel(r.eventType)}</td>
@@ -130,6 +131,7 @@ export function DashboardPage() {
           <div className="sec-h">
             <span className="eyebrow">Resultados</span>
             <h2 id="sec-recentes">Corridas recentes</h2>
+            <Link to="/corridas" className="sec-link">Ver todas</Link>
           </div>
           <div className="tbl-wrap">
             <table>
@@ -138,9 +140,9 @@ export function DashboardPage() {
               </thead>
               <tbody>
                 {overview?.recent.length ? overview.recent.map((r) => (
-                  <tr key={r.eventId}>
+                  <tr key={r.eventId} className="row-link" onClick={() => navigate(`/corridas/${r.eventId}`)}>
                     <td className="mono">{fmtDateTime(r.startsAt)}</td>
-                    <td>{r.title ?? 'Corrida diária'}</td>
+                    <td><Link to={`/corridas/${r.eventId}`} onClick={(e) => e.stopPropagation()}>{r.title ?? 'Corrida diária'}</Link></td>
                     <td>{r.track ?? '—'}</td>
                     <td><TierChip tier={r.tier} /></td>
                     <td className="num">{r.splits}</td>
@@ -171,11 +173,6 @@ function Tile({ n, l }: { n: number | undefined; l: string }) {
       <span className="l">{l}</span>
     </div>
   )
-}
-
-function TierChip({ tier }: { tier: string | null }) {
-  if (!tier) return <span className="flat">—</span>
-  return <span className={`tier tier-${tier}`}>{tierLabel(tier)}</span>
 }
 
 function LinkBanner() {
@@ -213,6 +210,7 @@ function LinkBanner() {
 
 function MyDriverPanel({ me, onUnlinked }: { me: MyDriver | null; onUnlinked: () => void }) {
   const { refreshUser } = useAuth()
+  const navigate = useNavigate()
   const [busy, setBusy] = useState(false)
 
   async function unlink() {
@@ -264,13 +262,18 @@ function MyDriverPanel({ me, onUnlinked }: { me: MyDriver | null; onUnlinked: ()
 
       <div className="driver">
         <div>
-          <span className="driver-name">{me.name}</span>
+          <span className="driver-name">
+            {me.driverId ? <Link to={`/pilotos/${me.driverId}`} className="plain">{me.name}</Link> : me.name}
+          </span>
           <span className="driver-sub">
             {me.nationality && <span className="pill">{me.nationality}</span>}
             {badge && <span className="pill">{badge}</span>}
             {me.lastSeenAt && <span>visto {fmtRelative(me.lastSeenAt)}</span>}
           </span>
-          <div style={{ marginTop: 'auto' }}>{unlinkBtn}</div>
+          <div style={{ marginTop: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {me.driverId && <Link to={`/pilotos/${me.driverId}`} className="btn btn-sm">Ver perfil completo</Link>}
+            {unlinkBtn}
+          </div>
         </div>
         <RankCell label="Driver Rank" title={me.driverRankTitle} tier={me.driverRankTier} />
         <RankCell label="Safety Rank" title={me.safetyRankTitle} tier={me.safetyRankTier} />
@@ -290,9 +293,9 @@ function MyDriverPanel({ me, onUnlinked }: { me: MyDriver | null; onUnlinked: ()
               const dr = fmtDelta(r.driverRankAdjustment)
               const sr = fmtDelta(r.safetyRankAdjustment)
               return (
-                <tr key={`${r.eventId}-${r.splitNo}`}>
+                <tr key={r.resultId} className="row-link" onClick={() => navigate(`/resultados/${r.resultId}`)}>
                   <td className="mono">{fmtDateTime(r.startsAt)}</td>
-                  <td>{r.title ?? 'Corrida diária'}</td>
+                  <td><Link to={`/resultados/${r.resultId}`} onClick={(e) => e.stopPropagation()}>{r.title ?? 'Corrida diária'}</Link></td>
                   <td>{r.track ?? '—'}</td>
                   <td><span className="cls">{classLabel(r.carClass)}</span></td>
                   <td className="num">{(r.classGridPos ?? r.gridPos) ? `P${r.classGridPos ?? r.gridPos}` : '—'}</td>

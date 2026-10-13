@@ -37,7 +37,7 @@ export function fmtDelta(n: number | null | undefined): { text: string; cls: str
 
 export const fmtInt = (n: number) => n.toLocaleString('pt-BR')
 
-const TIERS: Record<string, string> = { beginner: 'Iniciante', intermediate: 'Intermediário', advanced: 'Avançado' }
+const TIERS: Record<string, string> = { beginner: 'Iniciante', intermediate: 'Intermediário', advanced: 'Avançado', weekly: 'Semanal' }
 export const tierLabel = (t: string | null) => (t ? (TIERS[t] ?? t) : '—')
 
 const TYPES: Record<string, string> = { daily: 'Diária', weekly: 'Semanal', special: 'Especial', championship: 'Campeonato', hosted: 'Hospedada' }
@@ -63,6 +63,42 @@ export const classLabel = (c: string | null) => (c ? c.replace(/_/g, ' ') : '—
 
 const RANKS = ['bronze', 'silver', 'gold', 'platinum']
 export const rankClass = (r: string | null) => (r && RANKS.includes(r.toLowerCase()) ? `rk-${r.toLowerCase()}` : '')
+
+/** 0.72 -> "72%" */
+export const fmtPct = (f: number | null | undefined) => (f === null || f === undefined ? '—' : `${Math.round(f * 100)}%`)
+
+/** Tempo total de prova: 3607.29 -> "1:00:07.297". */
+export function fmtRaceTime(seconds: number | null | undefined): string {
+  if (!seconds) return '—'
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = seconds - h * 3600 - m * 60
+  const ss = s.toFixed(3).padStart(6, '0')
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`
+}
+
+/** Diferença para a referência: "+0.412". */
+export const fmtGap = (value: number | null | undefined, ref: number | null | undefined) =>
+  value && ref ? (value - ref <= 0.0005 ? 'melhor' : `+${(value - ref).toFixed(3)}`) : '—'
+
+/** Classe CSS do composto de pneu (cor do chip). */
+export function compoundClass(c: string | null): string {
+  const k = (c ?? '').toLowerCase()
+  if (k.includes('soft')) return 'cmp-soft'
+  if (k.includes('medium')) return 'cmp-medium'
+  if (k.includes('hard')) return 'cmp-hard'
+  if (k.includes('wet') || k.includes('rain')) return 'cmp-wet'
+  if (k.includes('inter')) return 'cmp-inter'
+  return 'cmp-other'
+}
+
+const STATUS: Record<string, string> = {
+  'Finished Normally': 'Terminou',
+  DNF: 'Abandonou',
+  DQ: 'Desclassificado',
+  None: '—',
+}
+export const finishLabel = (s: string | null) => (s ? (STATUS[s] ?? s) : '—')
 
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/)

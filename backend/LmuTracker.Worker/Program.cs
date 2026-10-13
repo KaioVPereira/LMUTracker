@@ -9,6 +9,20 @@ var builder = Host.CreateApplicationBuilder(args);
 
 builder.Services.AddInfrastructure(builder.Configuration);
 
+// Dados fictícios para testar as telas (só em desenvolvimento).
+if (args.Contains("seed-dev"))
+{
+    if (!builder.Environment.IsDevelopment())
+    {
+        Console.Error.WriteLine("seed-dev só roda em Development.");
+        return;
+    }
+    using var hostSeed = builder.Build();
+    using var scopeSeed = hostSeed.Services.CreateScope();
+    await DevSeed.RunAsync(scopeSeed.ServiceProvider.GetRequiredService<AppDbContext>());
+    return;
+}
+
 // Bootstrap único do login Steam da conta de serviço: gera e guarda o refresh token, depois sai.
 if (args.Contains("steam-login"))
 {

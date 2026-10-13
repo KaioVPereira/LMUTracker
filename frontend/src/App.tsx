@@ -1,7 +1,11 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { RequireAuth } from './components/RequireAuth'
 import { DashboardPage } from './pages/DashboardPage'
+import { DriverPage } from './pages/DriverPage'
 import { LoginPage } from './pages/LoginPage'
+import { RacePage } from './pages/RacePage'
+import { RacesPage } from './pages/RacesPage'
+import { ResultPage } from './pages/ResultPage'
 import { SteamReturnPage } from './pages/SteamReturnPage'
 
 export default function App() {
@@ -9,6 +13,10 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/" element={<RequireAuth><DashboardPage /></RequireAuth>} />
+      <Route path="/corridas" element={<RequireAuth><RacesPage /></RequireAuth>} />
+      <Route path="/corridas/:eventId" element={<RequireAuth><RacePage /></RequireAuth>} />
+      <Route path="/resultados/:resultId" element={<RequireAuth><ResultPage /></RequireAuth>} />
+      <Route path="/pilotos/:driverId" element={<RequireAuth><DriverPage /></RequireAuth>} />
       <Route path="/vincular/retorno" element={<RequireAuth><SteamReturnPage /></RequireAuth>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

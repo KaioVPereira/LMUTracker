@@ -62,6 +62,12 @@ public class ScanEvent : Entity
     /// <summary>Tentativas de baixar que falharam, para backoff.</summary>
     public int FetchAttempts { get; set; }
 
+    /// <summary>
+    /// Versão do detalhe gravado. Quando o scanner passa a guardar mais coisa (ex.: volta a volta), corridas
+    /// baixadas com versão menor voltam para a fila enquanto o resultado ainda existe no RaceOS.
+    /// </summary>
+    public int DetailVersion { get; set; }
+
     public DateTime FirstSeenAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<RaceSplit> Splits { get; set; } = new List<RaceSplit>();
