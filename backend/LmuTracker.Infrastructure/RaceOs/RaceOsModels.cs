@@ -57,9 +57,18 @@ public sealed class RaceOsSeries
 {
     [JsonPropertyName("seriesId")] public string? SeriesId { get; set; }
     [JsonPropertyName("title")] public string? Title { get; set; }
-    [JsonPropertyName("tier")] public string? Tier { get; set; }
-    [JsonPropertyName("type")] public string? Type { get; set; }
+    /// <summary>Nas séries vem como objeto (<c>{ name, ... }</c>), mas aceitamos texto também.</summary>
+    [JsonPropertyName("tier")] public JsonElement? TierRaw { get; set; }
+    [JsonPropertyName("type")] public JsonElement? Type { get; set; }
     [JsonPropertyName("events")] public List<RaceOsEvent> Events { get; set; } = new();
+
+    [JsonIgnore]
+    public string? Tier => TierRaw?.ValueKind switch
+    {
+        JsonValueKind.String => TierRaw.Value.GetString(),
+        JsonValueKind.Object when TierRaw.Value.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String => n.GetString(),
+        _ => null,
+    };
 }
 
 public sealed class EventContent

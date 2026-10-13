@@ -103,7 +103,8 @@ public sealed class LmuQueryService : ILmuQueryService
     {
         page = Math.Max(1, page);
         var q = _db.ScanEvents.Where(e => e.Status == ScanEventStatus.Fetched && e.Splits.Any());
-        if (!string.IsNullOrWhiteSpace(tier)) q = q.Where(e => e.Tier == tier);
+        if (tier == "weekly") q = q.Where(e => e.EventType == "weekly");
+        else if (!string.IsNullOrWhiteSpace(tier)) q = q.Where(e => e.Tier == tier);
 
         var total = await q.CountAsync(ct);
         var items = await q

@@ -65,7 +65,7 @@ public sealed class RaceOsClient
                 "/authenticate", new { token = ticket, game = "lmu", platform = "steam" }, ct);
             resp.EnsureSuccessStatusCode();
 
-            var auth = await resp.Content.ReadFromJsonAsync<AuthResult>(Json, ct)
+            var auth = await ReadJsonAsync<AuthResult>(resp, ct)
                 ?? throw new InvalidOperationException("Resposta de /authenticate vazia.");
             if (string.IsNullOrEmpty(auth.AccessToken))
                 throw new InvalidOperationException("RaceOS não devolveu accessToken.");
@@ -94,6 +94,16 @@ public sealed class RaceOsClient
         return await Http().SendAsync(req, ct);
     }
 
+    /// <summary>
+    /// Lê o corpo inteiro antes de desserializar: com o JSON completo em memória o conversor tolerante consegue
+    /// pular campos de formato inesperado (em streaming, Skip() falha no meio de um bloco parcial).
+    /// </summary>
+    private static async Task<T?> ReadJsonAsync<T>(HttpResponseMessage resp, CancellationToken ct)
+    {
+        var bytes = await resp.Content.ReadAsByteArrayAsync(ct);
+        return JsonSerializer.Deserialize<T>(bytes, Json);
+    }
+
     // ---------- Descoberta ----------
 
     /// <summary>Próximas corridas de um tier (beginner|intermediate|advanced), cada uma já com o eventId.</summary>
@@ -105,7 +115,7 @@ public sealed class RaceOsClient
             _log.LogWarning("daily/list/{Tier} => HTTP {Code}", tier, (int)resp.StatusCode);
             return Array.Empty<RaceOsEvent>();
         }
-        return await resp.Content.ReadFromJsonAsync<List<RaceOsEvent>>(Json, ct) ?? new();
+        return await ReadJsonAsync<List<RaceOsEvent>>(resp, ct) ?? new();
     }
 
     /// <summary>Séries de <c>special-events/{kind}</c> (kind = weekly | special), cada uma com suas instâncias.</summary>
@@ -114,7 +124,7 @@ public sealed class RaceOsClient
         using var resp = await SendAsync(HttpMethod.Get, $"/api/v1/special-events/{kind}", null, ct);
         if (!resp.IsSuccessStatusCode)
             throw new InvalidOperationException($"special-events/{kind} => HTTP {(int)resp.StatusCode}");
-        return await resp.Content.ReadFromJsonAsync<List<RaceOsSeries>>(Json, ct) ?? new();
+        return await ReadJsonAsync<List<RaceOsSeries>>(resp, ct) ?? new();
     }
 
     // ---------- Expansão ----------
@@ -126,7 +136,7 @@ public sealed class RaceOsClient
             new { game = "lmu", eventType, eventId }, ct);
         if (!resp.IsSuccessStatusCode)
             throw new InvalidOperationException($"event/overview {eventId} => HTTP {(int)resp.StatusCode}");
-        return await resp.Content.ReadFromJsonAsync<OverviewResult>(Json, ct)
+        return await ReadJsonAsync<OverviewResult>(resp, ct)
             ?? throw new InvalidOperationException($"event/overview {eventId} veio vazio");
     }
 
@@ -141,6 +151,6 @@ public sealed class RaceOsClient
         if (resp.StatusCode == HttpStatusCode.NotFound) return null;
         if (!resp.IsSuccessStatusCode)
             throw new InvalidOperationException($"result {eventId} split {splitNo} => HTTP {(int)resp.StatusCode}");
-        return await resp.Content.ReadFromJsonAsync<SplitResult>(Json, ct);
+        return await ReadJsonAsync<SplitResult>(resp, ct);
     }
 }
