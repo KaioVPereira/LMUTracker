@@ -128,11 +128,11 @@ public sealed class RaceOsClient
         var series = JsonSerializer.Deserialize<List<RaceOsSeries>>(bytes, Json) ?? new();
         var instances = series.Sum(x => x.Events.Count);
         _log.LogInformation("special-events/{Kind}: {Series} séries, {Events} instâncias.", kind, series.Count, instances);
-        // Formato ainda não confirmado: se nenhuma instância vier, mostra o começo do JSON (só metadados públicos
+        // Formato ainda não confirmado: mostra o começo do JSON (só metadados públicos
         // da agenda) uma vez por processo, para ajustar o modelo.
-        if (instances == 0 && series.Count > 0 && _loggedSpecialSample.Add(kind))
+        if (series.Count > 0 && _loggedSpecialSample.Add(kind))
             _log.LogWarning("special-events/{Kind} amostra: {Sample}", kind,
-                Encoding.UTF8.GetString(bytes, 0, Math.Min(bytes.Length, 1500)));
+                Encoding.UTF8.GetString(bytes, 0, Math.Min(bytes.Length, 4000)));
         return series;
     }
 
