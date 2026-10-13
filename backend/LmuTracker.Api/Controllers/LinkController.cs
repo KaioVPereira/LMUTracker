@@ -2,11 +2,13 @@ using LmuTracker.Application.Auth;
 using LmuTracker.Application.Linking;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace LmuTracker.Api.Controllers;
 
 [Authorize]
 [Route("api/link")]
+[EnableRateLimiting("auth")]
 public class LinkController : ApiControllerBase
 {
     private readonly ISteamLinkService _steam;

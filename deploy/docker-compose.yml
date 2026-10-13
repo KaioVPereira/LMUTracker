@@ -1,14 +1,17 @@
 name: lmutracker
 
-# Deploy do LMUTracker. Por enquanto só o scanner (Worker) — a Api/site entram depois.
+# Deploy do LMUTracker: o scanner (worker) e o site (lmutracker-api = Api + front).
 # Segredos ficam no .env ao lado (NUNCA versionado). Veja .env.example.
 #
 # BANCO: reusa o SQL Server que JÁ roda para o GameTracker (o VPS é de 4GB; um segundo SQL Server
-# estouraria a RAM). O worker entra na rede do GameTracker e fala com o serviço `db` por dentro dela,
-# num banco separado `LmuTracker` — que o próprio worker cria no start (EF MigrateAsync).
+# estouraria a RAM). Os serviços entram na rede do GameTracker e falam com o `db` por dentro dela, num
+# banco separado `LmuTracker` — que o worker cria/migra no start (EF MigrateAsync).
+#
+# NOMES NA REDE COMPARTILHADA: cada serviço vira um nome de DNS na rede do GameTracker. NUNCA chame um
+# serviço daqui de `api`, `web` ou `db` — o Caddy do GameTracker resolveria `api` também para o nosso
+# contêiner e mandaria parte do tráfego do gamestrackers.com para cá.
 #
 # A rede externa abaixo é a do compose do GameTracker (name: gametracker -> rede gametracker_default).
-# Confira com `docker network ls` e ajuste se o nome for outro.
 
 services:
   worker:
@@ -29,6 +32,24 @@ services:
       - gametracker
     restart: unless-stopped
 
+  # Site: Api + front na porta 8080, sem porta publicada. Quem expõe é o Caddy do GameTracker, pelo bloco
+  # lmutracker.{$DOMAIN} -> lmutracker-api:8080 (mesmo padrão do financas/deuquanto).
+  lmutracker-api:
+    build:
+      context: ..
+      dockerfile: Dockerfile.site
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Default: ${LMU_DB}
+      Jwt__SecretFile: /data/jwt.key        # gerado na 1ª subida e guardado no volume
+      Site__BaseUrl: https://lmutracker.gamestrackers.com
+    volumes:
+      - api-data:/data
+    networks:
+      - gametracker
+    restart: unless-stopped
+
 networks:
   gametracker:
     external: true
@@ -36,3 +57,4 @@ networks:
 
 volumes:
   steam-session:
+  api-data:

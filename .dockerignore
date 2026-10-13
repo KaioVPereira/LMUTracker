@@ -1,0 +1,10 @@
+# Vale para builds com contexto na raiz (Dockerfile.site).
+.git
+**/node_modules
+**/bin
+**/obj
+frontend/dist
+**/*.log
+**/.vs
+deploy/.env
+**/steam-session*.json

@@ -1,10 +1,12 @@
 using LmuTracker.Application.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace LmuTracker.Api.Controllers;
 
 [Route("api/auth")]
+[EnableRateLimiting("auth")] // login e cadastro são a superfície de força-bruta
 public class AuthController : ApiControllerBase
 {
     private readonly IAuthService _auth;
@@ -23,6 +25,7 @@ public class AuthController : ApiControllerBase
         => Ok(await _auth.LoginAsync(request, ct));
 
     [Authorize]
+    [DisableRateLimiting] // chamado a cada carregamento de página; não é alvo de força-bruta
     [HttpGet("me")]
     public async Task<ActionResult<UserDto>> Me(CancellationToken ct)
     {

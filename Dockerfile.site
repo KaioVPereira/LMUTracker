@@ -1,0 +1,29 @@
+# Site do LMUTracker numa imagem só: a Api .NET serve /api e também o build do front (SPA).
+# Contexto de build: a raiz do repositório (precisa de frontend/ e backend/).
+
+# ---------- 1) Front (React/Vite) ----------
+FROM node:22-alpine AS web
+WORKDIR /web
+COPY frontend/package*.json ./
+# npm install (e não npm ci): o lockfile é gerado no Windows e não traz os binários nativos de Linux
+# (ex.: o rolldown do Vite); o npm install resolve o que a plataforma do build precisa.
+RUN npm install --no-audit --no-fund
+COPY frontend/ ./
+RUN npm run build
+
+# ---------- 2) Api (.NET) ----------
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS api
+WORKDIR /src
+COPY backend/ ./
+RUN dotnet restore LmuTracker.Api/LmuTracker.Api.csproj
+RUN dotnet publish LmuTracker.Api/LmuTracker.Api.csproj -c Release -o /app --no-restore
+
+# ---------- 3) Imagem final (só runtime) ----------
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+WORKDIR /app
+COPY --from=api /app .
+COPY --from=web /web/dist ./wwwroot
+
+ENV ASPNETCORE_URLS=http://+:8080
+EXPOSE 8080
+ENTRYPOINT ["dotnet", "LmuTracker.Api.dll"]
