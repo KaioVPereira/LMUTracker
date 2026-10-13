@@ -13,6 +13,12 @@ public class AppDbContext : DbContext
     public DbSet<RaceResult> RaceResults => Set<RaceResult>();
     public DbSet<Driver> Drivers => Set<Driver>();
 
+    protected override void ConfigureConventions(ModelConfigurationBuilder b)
+    {
+        b.Properties<DateTime>().HaveConversion<UtcDateTimeConverter>();
+        b.Properties<DateTime?>().HaveConversion<NullableUtcDateTimeConverter>();
+    }
+
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<User>(e =>

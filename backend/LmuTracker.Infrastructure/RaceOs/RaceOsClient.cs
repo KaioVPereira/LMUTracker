@@ -118,26 +118,28 @@ public sealed class RaceOsClient
 
     // ---------- Expansão ----------
 
-    /// <summary>Metadados do evento, inclusive <c>totalSplits</c>.</summary>
-    public async Task<OverviewResult?> GetOverviewAsync(string eventType, string eventId, CancellationToken ct)
+    /// <summary>Metadados do evento, inclusive <c>totalSplits</c>. Falha HTTP vira exceção (o scanner tenta de novo).</summary>
+    public async Task<OverviewResult> GetOverviewAsync(string eventType, string eventId, CancellationToken ct)
     {
         using var resp = await SendAsync(HttpMethod.Post, "/api/v1/event/overview",
             new { game = "lmu", eventType, eventId }, ct);
-        if (!resp.IsSuccessStatusCode) return null;
-        return await resp.Content.ReadFromJsonAsync<OverviewResult>(Json, ct);
+        if (!resp.IsSuccessStatusCode)
+            throw new InvalidOperationException($"event/overview {eventId} => HTTP {(int)resp.StatusCode}");
+        return await resp.Content.ReadFromJsonAsync<OverviewResult>(Json, ct)
+            ?? throw new InvalidOperationException($"event/overview {eventId} veio vazio");
     }
 
-    /// <summary>Resultado de um split. Null em 404 (split inexistente — fim da paginação).</summary>
+    /// <summary>
+    /// Resultado de um split. Null SÓ em 404 (resultado ainda não publicado / split inexistente); qualquer
+    /// outra falha HTTP vira exceção, para não ser confundida com "acabaram os splits".
+    /// </summary>
     public async Task<SplitResult?> GetResultAsync(string eventId, int splitNo, CancellationToken ct)
     {
         using var resp = await SendAsync(HttpMethod.Get,
             $"/api/v1/result?eventId={Uri.EscapeDataString(eventId)}&splitNo={splitNo}", null, ct);
         if (resp.StatusCode == HttpStatusCode.NotFound) return null;
         if (!resp.IsSuccessStatusCode)
-        {
-            _log.LogWarning("result {Event} split {Split} => HTTP {Code}", eventId, splitNo, (int)resp.StatusCode);
-            return null;
-        }
+            throw new InvalidOperationException($"result {eventId} split {splitNo} => HTTP {(int)resp.StatusCode}");
         return await resp.Content.ReadFromJsonAsync<SplitResult>(Json, ct);
     }
 }

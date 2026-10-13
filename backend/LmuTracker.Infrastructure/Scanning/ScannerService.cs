@@ -15,8 +15,17 @@ namespace LmuTracker.Infrastructure.Scanning;
 public sealed class ScannerService
 {
     private static readonly string[] Tiers = { "beginner", "intermediate", "advanced" };
-    private const int MaxFetchAttempts = 6;
-    private const int MaxSplits = 40; // trava de segurança; na prática paramos no primeiro 404
+    private const int MaxSplits = 40; // trava de segurança
+
+    // O fim "previsto" (raceEndsAt) chega antes do resultado: corrida por tempo termina na volta seguinte e o
+    // RaceOS ainda processa. Então esperamos, e um 404 significa "ainda não" — nunca "corrida vazia".
+    private static readonly TimeSpan FirstFetchDelay = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan RetryEvery = TimeSpan.FromMinutes(5);
+    private const int MaxFetchAttempts = 36;       // ~3h tentando a cada 5 min
+    private const int AcceptPartialAfter = 12;     // depois de ~1h, grava os splits que vieram
+    private static readonly TimeSpan EmptyGrace = TimeSpan.FromMinutes(30); // só então "sem splits" = vazia
+
+    private enum FetchOutcome { Fetched, NotReady }
 
     private readonly AppDbContext _db;
     private readonly RaceOsClient _raceos;
@@ -105,18 +114,22 @@ public sealed class ScannerService
     public async Task FetchDueAsync(CancellationToken ct)
     {
         var now = DateTime.UtcNow;
+        var readyAfter = now - FirstFetchDelay;
 
-        // Marca como prontas as pendentes que já passaram do fim (com folga de 1 min).
+        await RequeueBrokenAsync(now, ct);
+
+        // Pendentes cujo fim previsto já passou (com folga) entram na fila.
         var toReady = await _db.ScanEvents
-            .Where(x => x.Status == ScanEventStatus.Pending && x.RaceEndsAt < now.AddMinutes(-1))
+            .Where(x => x.Status == ScanEventStatus.Pending && x.RaceEndsAt < readyAfter)
             .ToListAsync(ct);
         foreach (var e in toReady) e.Status = ScanEventStatus.Ready;
         if (toReady.Count > 0) await _db.SaveChangesAsync(ct);
 
+        // Da fila: as nunca tentadas e as que já esperaram o intervalo desde a última tentativa.
+        var retryBefore = now - RetryEvery;
         var due = await _db.ScanEvents
-            .Where(x => (x.Status == ScanEventStatus.Ready
-                         || (x.Status == ScanEventStatus.Failed && x.FetchAttempts < MaxFetchAttempts))
-                        && x.RaceEndsAt < now.AddMinutes(-1))
+            .Where(x => x.Status == ScanEventStatus.Ready && x.RaceEndsAt < readyAfter
+                        && (x.FetchAttempts == 0 || x.UpdatedAt < retryBefore))
             .OrderBy(x => x.RaceEndsAt)
             .Take(20)
             .ToListAsync(ct);
@@ -124,38 +137,120 @@ public sealed class ScannerService
         foreach (var e in due)
         {
             ct.ThrowIfCancellationRequested();
+            string? reason;
             try
             {
-                await FetchEventAsync(e, ct);
+                var outcome = await FetchEventAsync(e, now, ct);
+                if (outcome == FetchOutcome.Fetched) continue;
+                reason = "resultado ainda não publicado";
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                DiscardPendingChanges(); // o que ficou pela metade não pode ir junto com o registro da tentativa
+                reason = ex.Message;
+            }
+
+            e.FetchAttempts++;
+            e.UpdatedAt = DateTime.UtcNow;
+            if (e.FetchAttempts >= MaxFetchAttempts)
             {
                 e.Status = ScanEventStatus.Failed;
-                e.FetchAttempts++;
-                e.UpdatedAt = DateTime.UtcNow;
-                await _db.SaveChangesAsync(ct);
-                _log.LogWarning(ex, "Scanner: falha ao baixar evento {Event} (tentativa {Attempt}).",
-                    e.EventId, e.FetchAttempts);
+                _log.LogWarning("Scanner: desisti do evento {Event} após {Attempts} tentativas ({Reason}).",
+                    e.EventId, e.FetchAttempts, reason);
+            }
+            else
+            {
+                _log.LogInformation("Scanner: evento {Event} fica para depois — {Reason} (tentativa {Attempt}).",
+                    e.EventId, reason, e.FetchAttempts);
+            }
+            await _db.SaveChangesAsync(ct);
+        }
+    }
+
+    /// <summary>Desfaz inclusões/alterações ainda não salvas (tentativa que falhou no meio).</summary>
+    private void DiscardPendingChanges()
+    {
+        foreach (var entry in _db.ChangeTracker.Entries().ToList())
+        {
+            switch (entry.State)
+            {
+                case EntityState.Added:
+                    entry.State = EntityState.Detached;
+                    break;
+                case EntityState.Modified:
+                case EntityState.Deleted:
+                    entry.CurrentValues.SetValues(entry.OriginalValues);
+                    entry.State = EntityState.Unchanged;
+                    break;
             }
         }
     }
 
-    private async Task FetchEventAsync(ScanEvent e, CancellationToken ct)
+    /// <summary>
+    /// Conserto de um bug antigo: corridas marcadas como baixadas sem nenhum split (o 404 de "ainda não
+    /// publicado" era lido como "acabou"). Voltam para a fila enquanto o resultado ainda deve existir.
+    /// </summary>
+    private async Task RequeueBrokenAsync(DateTime now, CancellationToken ct)
     {
-        var overview = await _raceos.GetOverviewAsync(e.EventType, e.EventId, ct);
-        var total = overview?.TotalSplits ?? MaxSplits;
-        e.TotalSplits = overview?.TotalSplits;
+        var broken = await _db.ScanEvents
+            .Where(x => x.Status == ScanEventStatus.Fetched
+                        && (x.TotalSplits == null || x.TotalSplits > 0)
+                        && !x.Splits.Any()
+                        && x.RaceEndsAt > now.AddDays(-2))
+            .ToListAsync(ct);
+        if (broken.Count == 0) return;
 
-        // Recomeço limpo: apaga splits já gravados deste evento (caso de retry após falha parcial).
+        foreach (var e in broken)
+        {
+            e.Status = ScanEventStatus.Ready;
+            e.FetchAttempts = 0;
+            e.FetchedAt = null;
+        }
+        await _db.SaveChangesAsync(ct);
+        _log.LogInformation("Scanner: {Count} corridas salvas sem splits voltaram para a fila.", broken.Count);
+    }
+
+    private async Task<FetchOutcome> FetchEventAsync(ScanEvent e, DateTime now, CancellationToken ct)
+    {
+        // ---- Fase 1: só rede. Nada no banco até termos o que gravar. ----
+        var overview = await _raceos.GetOverviewAsync(e.EventType, e.EventId, ct);
+        var total = Math.Min(overview.TotalSplits, MaxSplits);
+
+        if (total <= 0)
+        {
+            // Sem splits: ninguém correu, ou o RaceOS ainda não fechou a corrida. Só aceitamos "vazia" depois
+            // da carência — antes disso é "ainda não".
+            if (now < e.RaceEndsAt + EmptyGrace) return FetchOutcome.NotReady;
+            e.TotalSplits = 0;
+            e.Status = ScanEventStatus.Fetched;
+            e.FetchedAt = DateTime.UtcNow;
+            e.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+            _log.LogInformation("Scanner: evento {Event} terminou sem participantes.", e.EventId);
+            return FetchOutcome.Fetched;
+        }
+
+        var acceptPartial = e.FetchAttempts >= AcceptPartialAfter;
+        var results = new List<(int SplitNo, SplitResult Result)>();
+        for (var n = 1; n <= total; n++)
+        {
+            var result = await _raceos.GetResultAsync(e.EventId, n, ct);
+            if (result is null)
+            {
+                // 404 = esse split ainda não foi publicado. Tudo ou nada, salvo depois de ~1h esperando.
+                if (acceptPartial && results.Count > 0) break;
+                return FetchOutcome.NotReady;
+            }
+            results.Add((n, result));
+        }
+
+        // ---- Fase 2: grava tudo de uma vez. ----
         var old = await _db.RaceSplits.Where(s => s.ScanEventId == e.Id).ToListAsync(ct);
         if (old.Count > 0) _db.RaceSplits.RemoveRange(old);
 
-        var splitsSaved = 0;
-        for (var n = 1; n <= Math.Min(total, MaxSplits); n++)
+        e.TotalSplits = overview.TotalSplits;
+        foreach (var (n, result) in results)
         {
-            var result = await _raceos.GetResultAsync(e.EventId, n, ct);
-            if (result is null) break; // 404 => acabou
-
             if (e.Title is null) e.Title = result.Title;
             e.Track ??= result.Track;
             e.Scene ??= result.TrackScene;
@@ -201,7 +296,6 @@ public sealed class ScannerService
 
             split.DriverCount = split.Results.Count;
             _db.RaceSplits.Add(split);
-            splitsSaved++;
 
             await UpsertDriversAsync(result.Drivers, ct);
         }
@@ -210,7 +304,9 @@ public sealed class ScannerService
         e.FetchedAt = DateTime.UtcNow;
         e.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
-        _log.LogInformation("Scanner: evento {Event} baixado ({Splits} splits).", e.EventId, splitsSaved);
+        _log.LogInformation("Scanner: evento {Event} baixado ({Splits} de {Total} splits).",
+            e.EventId, results.Count, overview.TotalSplits);
+        return FetchOutcome.Fetched;
     }
 
     private async Task UpsertDriversAsync(IEnumerable<ResultDriver> drivers, CancellationToken ct)
@@ -218,7 +314,10 @@ public sealed class ScannerService
         foreach (var d in drivers)
         {
             if (string.IsNullOrEmpty(d.SteamId)) continue;
-            var drv = await _db.Drivers.FirstOrDefaultAsync(x => x.SteamId == d.SteamId, ct);
+            // Procura primeiro no que já está na memória: um piloto incluído agora e ainda não salvo não
+            // aparece na consulta ao banco, e incluí-lo de novo quebraria o índice único de SteamId.
+            var drv = _db.Drivers.Local.FirstOrDefault(x => x.SteamId == d.SteamId)
+                      ?? await _db.Drivers.FirstOrDefaultAsync(x => x.SteamId == d.SteamId, ct);
             if (drv is null)
             {
                 drv = new Driver { SteamId = d.SteamId! };

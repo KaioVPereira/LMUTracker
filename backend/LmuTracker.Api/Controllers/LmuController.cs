@@ -19,4 +19,9 @@ public class LmuController : ApiControllerBase
     [HttpGet("overview")]
     public async Task<ActionResult<OverviewDto>> Overview(CancellationToken ct)
         => Ok(await _lmu.GetOverviewAsync(ct));
+
+    /// <summary>Painel do piloto vinculado (só dados do próprio usuário).</summary>
+    [HttpGet("me")]
+    public async Task<ActionResult<MyDriverDto>> Me(CancellationToken ct)
+        => Ok(await _lmu.GetMyDriverAsync(UserId, ct));
 }
