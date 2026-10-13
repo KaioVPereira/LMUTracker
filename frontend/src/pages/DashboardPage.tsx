@@ -1,27 +1,31 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { api, ApiError } from '../api/client'
-import type { MyDriver, Overview, UserDto } from '../api/types'
+import type { MyDriver, Overview, UpcomingRace, UserDto } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
-import { TierChip } from '../components/Bits'
+import {
+  ClassChip, ClassChips, CountUp, EmptyState, ErrorBox, Loading, RowsSkeleton, Skeleton, TierChip, TrackArt,
+} from '../components/Bits'
 import { TopBar } from '../components/TopBar'
 import {
-  badgeLabel, classLabel, fmtDateTime, fmtDelta, fmtInt, fmtLap, fmtRelative, fmtTime, parseUtc,
-  rankClass, typeLabel,
+  badgeLabel, fmtClock, fmtDateTime, fmtDelta, fmtInt, fmtLap, fmtRelative, fmtTime, parseUtc, rankClass, typeLabel,
 } from '../lib/format'
 
-const REFRESH_MS = 60_000
+const REFRESH_MS = 30_000
 const CLOCK_MS = 30_000
 
 /** Relógio de estado: "Ao vivo" e "em X min" mudam com ele, não a cada render. */
-function useNow(): number {
+function useNow(every = CLOCK_MS): number {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), CLOCK_MS)
+    const id = window.setInterval(() => setNow(Date.now()), every)
     return () => window.clearInterval(id)
-  }, [])
+  }, [every])
   return now
 }
+
+const isLive = (r: UpcomingRace, now: number) =>
+  parseUtc(r.startsAt).getTime() <= now && now < parseUtc(r.endsAt).getTime()
 
 export function DashboardPage() {
   const { user } = useAuth()
@@ -59,103 +63,101 @@ export function DashboardPage() {
 
   if (!user) return null
 
+  const upcoming = overview?.upcoming ?? []
+  const live = upcoming.filter((r) => isLive(r, now))
+  const heroRace = live[0] ?? upcoming.find((r) => parseUtc(r.startsAt).getTime() > now) ?? null
+
   return (
     <>
       <TopBar />
       <div className="wrap">
         {flash && (
           <div className="flash" role="status">
-            {flash}{' '}
+            {flash}
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setFlash(null)}>Fechar</button>
           </div>
         )}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <span className="eyebrow">Painel</span>
-          <h1 style={{ fontSize: 'clamp(26px, 4vw, 36px)' }}>Olá, {user.displayName}</h1>
-        </div>
+        {overviewError && <ErrorBox message={overviewError} onRetry={loadOverview} />}
+
+        {!overview && !overviewError ? <HeroSkeleton /> : heroRace
+          ? <Hero race={heroRace} live={live.includes(heroRace)} liveCount={live.length} />
+          : (
+            <EmptyState title="Nenhuma corrida na agenda agora">
+              O scanner confere a agenda do RaceOS a cada 2 minutos — as próximas largadas aparecem aqui sozinhas.
+            </EmptyState>
+          )}
 
         {user.steamId ? <MyDriverPanel me={me} onUnlinked={loadMe} /> : <LinkBanner />}
 
-        <section aria-labelledby="sec-geral">
-          <div className="sec-h">
-            <span className="eyebrow">Le Mans Ultimate</span>
-            <h2 id="sec-geral">Visão geral</h2>
-            {overview?.lastActivityAt && (
-              <span className="rel">scanner ativo {fmtRelative(overview.lastActivityAt, now)}</span>
-            )}
-          </div>
-          {overviewError && <div className="form-error">{overviewError}</div>}
-          <div className="tiles">
-            <Tile n={overview?.eventsTracked} l="Corridas acompanhadas" />
-            <Tile n={overview?.racesFetched} l="Corridas com resultado" />
-            <Tile n={overview?.resultsStored} l="Resultados guardados" />
-            <Tile n={overview?.driversIndexed} l="Pilotos conhecidos" />
-          </div>
+        <section aria-label="Números do Pitwall" className="tiles">
+          <Tile n={overview?.racesFetched} l="corridas com resultado" />
+          <Tile n={overview?.resultsStored} l="resultados guardados" />
+          <Tile n={overview?.driversIndexed} l="pilotos conhecidos" />
+          <Tile n={overview?.eventsTracked} l="corridas acompanhadas" />
         </section>
 
         <section aria-labelledby="sec-agenda">
           <div className="sec-h">
-            <span className="eyebrow">Agenda</span>
-            <h2 id="sec-agenda">Próximas corridas</h2>
+            <h2 id="sec-agenda">Agenda</h2>
+            <span className="rel">horário local</span>
+            {overview?.lastActivityAt && (
+              <span className="rel" style={{ marginLeft: 'auto' }}>scanner ativo {fmtRelative(overview.lastActivityAt, now)}</span>
+            )}
           </div>
-          <div className="tbl-wrap">
-            <table>
-              <thead>
-                <tr><th>Largada</th><th>Evento</th><th>Pista</th><th>Nível</th><th>Tipo</th><th>Quando</th></tr>
-              </thead>
-              <tbody>
-                {overview?.upcoming.length ? overview.upcoming.map((r) => {
-                  const live = parseUtc(r.startsAt).getTime() <= now && now < parseUtc(r.endsAt).getTime()
-                  return (
-                    <tr key={r.eventId} className="row-link" onClick={() => navigate(`/corridas/${r.eventId}`)}>
-                      <td className="mono">{fmtTime(r.startsAt)}</td>
-                      <td><Link to={`/corridas/${r.eventId}`} onClick={(e) => e.stopPropagation()}>{r.title ?? 'Corrida diária'}</Link></td>
-                      <td>{r.track ?? '—'}</td>
-                      <td><TierChip tier={r.tier} /></td>
-                      <td>{typeLabel(r.eventType)}</td>
-                      <td>{live ? <span className="live">Ao vivo</span> : <span className="rel">{fmtRelative(r.startsAt, now)}</span>}</td>
-                    </tr>
-                  )
-                }) : (
-                  <tr><td colSpan={6} className="empty">
-                    {overview ? 'Nenhuma corrida na agenda agora. O scanner atualiza a cada 2 minutos.' : 'Carregando…'}
-                  </td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          {!overview ? <RowsSkeleton rows={6} /> : upcoming.length ? (
+            <div className="rows">
+              {upcoming.map((r) => {
+                const on = isLive(r, now)
+                return (
+                  <Link key={r.eventId} to={`/corridas/${r.eventId}`} className={`rowi${on ? ' is-live' : ''}`}>
+                    <span className="rowi-time">
+                      {fmtTime(r.startsAt)}
+                      <small>{on ? 'AO VIVO' : fmtRelative(r.startsAt, now)}</small>
+                    </span>
+                    <span className="rowi-main">
+                      <b>{r.title ?? 'Corrida diária'}</b>
+                      <span>{r.track ?? '—'} · {typeLabel(r.eventType)}</span>
+                    </span>
+                    <span className="rowi-side"><TierChip tier={r.tier} /></span>
+                    <span className="rowi-num">até {fmtTime(r.endsAt)}</span>
+                  </Link>
+                )
+              })}
+            </div>
+          ) : (
+            <EmptyState title="Agenda vazia">Nenhuma corrida futura na agenda neste momento.</EmptyState>
+          )}
         </section>
 
         <section aria-labelledby="sec-recentes">
           <div className="sec-h">
-            <span className="eyebrow">Resultados</span>
-            <h2 id="sec-recentes">Corridas recentes</h2>
-            <Link to="/corridas" className="sec-link">Ver todas</Link>
+            <h2 id="sec-recentes">Resultados recentes</h2>
+            <Link to="/corridas" className="sec-link">Ver todas →</Link>
           </div>
-          <div className="tbl-wrap">
-            <table>
-              <thead>
-                <tr><th>Data</th><th>Evento</th><th>Pista</th><th>Nível</th><th className="num">Splits</th><th className="num">Pilotos</th></tr>
-              </thead>
-              <tbody>
-                {overview?.recent.length ? overview.recent.map((r) => (
-                  <tr key={r.eventId} className="row-link" onClick={() => navigate(`/corridas/${r.eventId}`)}>
-                    <td className="mono">{fmtDateTime(r.startsAt)}</td>
-                    <td><Link to={`/corridas/${r.eventId}`} onClick={(e) => e.stopPropagation()}>{r.title ?? 'Corrida diária'}</Link></td>
-                    <td>{r.track ?? '—'}</td>
-                    <td><TierChip tier={r.tier} /></td>
-                    <td className="num">{r.splits}</td>
-                    <td className="num">{fmtInt(r.drivers)}</td>
-                  </tr>
-                )) : (
-                  <tr><td colSpan={6} className="empty">
-                    {overview ? 'Assim que uma corrida da agenda terminar, os resultados aparecem aqui.' : 'Carregando…'}
-                  </td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          {!overview ? (
+            <div className="grid-cards" role="status" aria-label="Carregando">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="race-card"><Skeleton w={80} h={18} r={999} /><Skeleton w="75%" h={22} /><Skeleton w="55%" /><Skeleton w="40%" /></div>
+              ))}
+            </div>
+          ) : overview.recent.length ? (
+            <div className="grid-cards">
+              {overview.recent.map((r) => (
+                <Link key={r.eventId} to={`/corridas/${r.eventId}`} className="race-card lift">
+                  <span className="top"><TierChip tier={r.tier} /><span className="rel">{fmtRelative(r.startsAt, now)}</span></span>
+                  <h3>{r.title ?? 'Corrida diária'}</h3>
+                  <span className="meta">{r.track ?? '—'} · {fmtDateTime(r.startsAt)}</span>
+                  <span className="chips"><ClassChips classes={r.classes} /></span>
+                  <span className="foot-nums"><span><b>{r.splits}</b> splits</span><span><b>{fmtInt(r.drivers)}</b> pilotos</span></span>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <EmptyState title="Ainda sem resultados">
+              Assim que uma corrida da agenda terminar, o resultado aparece aqui uns 10 minutos depois.
+            </EmptyState>
+          )}
         </section>
 
         <div className="foot">
@@ -166,10 +168,46 @@ export function DashboardPage() {
   )
 }
 
+/** Corrida em destaque: a que está acontecendo (contagem até a bandeira) ou a próxima (contagem até a largada). */
+function Hero({ race, live, liveCount }: { race: UpcomingRace; live: boolean; liveCount: number }) {
+  const now = useNow(1000)
+  const target = parseUtc(live ? race.endsAt : race.startsAt).getTime()
+  return (
+    <article className={`hero${live ? '' : ' is-next'}`} aria-labelledby="hero-title">
+      <TrackArt className="hero-art" />
+      <div className="hero-main">
+        {live ? <span className="live">Ao vivo{liveCount > 1 ? ` · ${liveCount} corridas` : ''}</span> : <span className="next-tag">Próxima largada</span>}
+        <h1 id="hero-title" className="hero-title">{race.title ?? 'Corrida diária'}</h1>
+        <p className="hero-sub">{race.track ?? '—'} · {typeLabel(race.eventType)} · largada {fmtTime(race.startsAt)}</p>
+        <span className="chips"><TierChip tier={race.tier} /></span>
+        <div className="hero-actions">
+          <Link to={`/corridas/${race.eventId}`} className="btn btn-primary">{live ? 'Acompanhar' : 'Ver detalhes'}</Link>
+          <span className="hero-clock" aria-live="off">
+            <b>{fmtClock(target - now)}</b>{live ? 'para a bandeira' : 'para a largada'}
+          </span>
+        </div>
+      </div>
+    </article>
+  )
+}
+
+function HeroSkeleton() {
+  return (
+    <div className="hero" role="status" aria-label="Carregando">
+      <div className="hero-main sk-stack">
+        <Skeleton w={130} h={22} r={999} />
+        <Skeleton w="70%" h={56} r={12} />
+        <Skeleton w="45%" h={16} />
+        <Skeleton w={160} h={44} r={999} />
+      </div>
+    </div>
+  )
+}
+
 function Tile({ n, l }: { n: number | undefined; l: string }) {
   return (
     <div className="tile">
-      <span className="n">{n === undefined ? '—' : fmtInt(n)}</span>
+      <span className="n">{n === undefined ? <Skeleton w={70} h={30} /> : <CountUp value={n} />}</span>
       <span className="l">{l}</span>
     </div>
   )
@@ -230,23 +268,14 @@ function MyDriverPanel({ me, onUnlinked }: { me: MyDriver | null; onUnlinked: ()
     </button>
   )
 
-  if (!me) return <div className="card pad note">Carregando seu piloto…</div>
+  if (!me) return <Loading what="Carregando seu piloto…" rows={2} />
 
   if (!me.found) {
     return (
-      <section aria-labelledby="sec-piloto">
-        <div className="sec-h">
-          <span className="eyebrow">Seu piloto</span>
-          <h2 id="sec-piloto">Ainda não te encontramos</h2>
-        </div>
-        <div className="card pad" style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-          <p className="note" style={{ maxWidth: '62ch' }}>
-            Steam vinculada (<span className="mono">{me.steamId}</span>). Seus resultados aparecem aqui depois da
-            sua próxima corrida oficial: o scanner guarda as corridas a partir de quando começou a rodar.
-          </p>
-          {unlinkBtn}
-        </div>
-      </section>
+      <EmptyState title="Ainda não vimos você correr" action={unlinkBtn}>
+        Steam vinculada. O Pitwall registra as corridas oficiais desde que o scanner começou a rodar: depois da
+        sua próxima corrida, os resultados aparecem aqui uns 10 minutos após a bandeira.
+      </EmptyState>
     )
   }
 
@@ -255,8 +284,7 @@ function MyDriverPanel({ me, onUnlinked }: { me: MyDriver | null; onUnlinked: ()
   return (
     <section aria-labelledby="sec-piloto">
       <div className="sec-h">
-        <span className="eyebrow">Seu piloto</span>
-        <h2 id="sec-piloto">{me.name ?? 'Seu piloto'}</h2>
+        <h2 id="sec-piloto">Seu piloto</h2>
         <span className="rel">{me.racesFound} corrida{me.racesFound === 1 ? '' : 's'} encontrada{me.racesFound === 1 ? '' : 's'}</span>
       </div>
 
@@ -271,7 +299,7 @@ function MyDriverPanel({ me, onUnlinked }: { me: MyDriver | null; onUnlinked: ()
             {me.lastSeenAt && <span>visto {fmtRelative(me.lastSeenAt)}</span>}
           </span>
           <div style={{ marginTop: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {me.driverId && <Link to={`/pilotos/${me.driverId}`} className="btn btn-sm">Ver perfil completo</Link>}
+            {me.driverId && <Link to={`/pilotos/${me.driverId}`} className="btn btn-sm btn-primary">Ver perfil completo</Link>}
             {unlinkBtn}
           </div>
         </div>
@@ -297,7 +325,7 @@ function MyDriverPanel({ me, onUnlinked }: { me: MyDriver | null; onUnlinked: ()
                   <td className="mono">{fmtDateTime(r.startsAt)}</td>
                   <td><Link to={`/resultados/${r.resultId}`} onClick={(e) => e.stopPropagation()}>{r.title ?? 'Corrida diária'}</Link></td>
                   <td>{r.track ?? '—'}</td>
-                  <td><span className="cls">{classLabel(r.carClass)}</span></td>
+                  <td><ClassChip cls={r.carClass} /></td>
                   <td className="num">{(r.classGridPos ?? r.gridPos) ? `P${r.classGridPos ?? r.gridPos}` : '—'}</td>
                   <td className="num">{r.classPosition ? `P${r.classPosition}` : (r.finishStatus ?? '—')}</td>
                   <td className="num">{fmtLap(r.bestLapTime)}</td>
@@ -317,8 +345,7 @@ function RankCell({ label, title, tier }: { label: string; title: string | null;
   return (
     <div>
       <span className="rank-lab">{label}</span>
-      <span className={`rank-big ${rankClass(title)}`}>{title ?? '—'}</span>
-      {tier !== null && <span className="mono note">Tier {tier}</span>}
+      <span className={`rank-big ${rankClass(title)}`}>{title ?? '—'}{title && tier !== null ? ` ${tier}` : ''}</span>
     </div>
   )
 }

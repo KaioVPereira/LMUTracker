@@ -1,6 +1,6 @@
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import type { RaceDetail, SplitResults } from '../api/types'
-import { ClassChip, Delta, ErrorBox, Loading, Rank, TierChip } from '../components/Bits'
+import { ClassBarCell, ClassChip, ClassChips, Delta, ErrorBox, Loading, Rank, TierChip } from '../components/Bits'
 import { TopBar } from '../components/TopBar'
 import { finishLabel, fmtDateTime, fmtLap, fmtRaceTime, typeLabel } from '../lib/format'
 import { useApi } from '../lib/useApi'
@@ -42,7 +42,8 @@ export function RacePage() {
             <span className="eyebrow">{typeLabel(r.eventType)}</span>
             <h1>{r.title ?? 'Corrida'}</h1>
             <div className="meta-line">
-              <span>{r.track ?? '—'}</span><TierChip tier={r.tier} /><span className="mono">{fmtDateTime(r.startsAt)}</span>
+              <span>{r.track ?? '—'}</span><TierChip tier={r.tier} /><ClassChips classes={r.classes} solid />
+              <span className="mono">{fmtDateTime(r.startsAt)}</span>
             </div>
           </div>
           <div className="race-head-nums">
@@ -70,7 +71,7 @@ export function RacePage() {
               <table className="results">
                 <thead>
                   <tr>
-                    <th className="num">Pos</th><th className="num">Classe</th><th>Piloto</th><th>Carro</th>
+                    <th aria-hidden="true"></th><th className="num">Pos</th><th className="num">Classe</th><th>Piloto</th><th>Carro</th>
                     <th className="num">Larg.</th><th className="num">Voltas</th><th className="num">Melhor volta</th>
                     <th className="num">Tempo</th><th>DR</th><th>SR</th><th className="num">ΔDR</th><th className="num">ΔSR</th>
                   </tr>
@@ -78,6 +79,7 @@ export function RacePage() {
                 <tbody>
                   {rows.length ? rows.map((x) => (
                     <tr key={x.resultId} className="row-link" onClick={() => navigate(`/resultados/${x.resultId}`)}>
+                      <ClassBarCell cls={x.carClass} />
                       <td className="num pos-cell">{x.position ?? '—'}</td>
                       <td className="num"><span className="mono">{x.classPosition ? `P${x.classPosition}` : '—'}</span> <ClassChip cls={x.carClass} /></td>
                       <td>
@@ -97,12 +99,12 @@ export function RacePage() {
                       <td className="num"><Delta value={x.safetyRankAdjustment} /></td>
                     </tr>
                   )) : (
-                    <tr><td colSpan={12} className="empty">{results.loading ? 'Carregando…' : 'Sem pilotos neste split.'}</td></tr>
+                    <tr><td colSpan={13} className="empty">{results.loading ? 'Carregando…' : 'Sem pilotos neste split.'}</td></tr>
                   )}
                 </tbody>
               </table>
             </div>
-            <p className="note">Clique num piloto para ver o volta a volta dele nesta corrida. A volta mais rápida do split está em roxo.</p>
+            <p className="note">Clique num piloto para ver o volta a volta dele nesta corrida. A volta mais rápida do split está em roxo; a faixa à esquerda é a cor da classe.</p>
           </section>
         )}
       </div>

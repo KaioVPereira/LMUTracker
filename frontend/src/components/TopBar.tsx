@@ -1,41 +1,96 @@
+import { useEffect, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { initials } from '../lib/format'
+import { CommandPalette } from './CommandPalette'
 
 export function Logo() {
   return (
     <Link to="/" className="logo" aria-label="Pitwall — início">
       <span className="mk" aria-hidden="true" />
-      PIT<b>WALL</b>
+      PITWALL
     </Link>
   )
 }
 
+const ICONS = {
+  home: <path d="M3 11 12 4l9 7v9H3z" />,
+  flag: <path d="M5 21V4h11l-2 4 2 4H5" />,
+  user: <><circle cx="12" cy="8" r="4" /><path d="M4 21c1-4 4-6 8-6s7 2 8 6" /></>,
+  search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></>,
+}
+
+const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
+
+/** Ctrl+K / ⌘K de qualquer lugar; "/" quando não se está digitando num campo. */
+function useSearchShortcut(onOpen: () => void) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const t = e.target
+      const typing = t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); onOpen() }
+      else if (e.key === '/' && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); onOpen() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onOpen])
+}
+
+function Icon({ name }: { name: keyof typeof ICONS }) {
+  return (
+    <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {ICONS[name]}
+    </svg>
+  )
+}
+
+/** Barra de cima (desktop e celular) + barra de abas embaixo no celular. */
 export function TopBar() {
   const { user, logout } = useAuth()
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [openSearch] = useState(() => () => setSearchOpen(true))
+  useSearchShortcut(openSearch)
 
   return (
-    <header className="bar">
-      <div className="bar-in">
-        <Logo />
-        {user && (
-          <nav className="nav" aria-label="Principal">
-            <NavLink to="/" end>Painel</NavLink>
-            <NavLink to="/corridas">Corridas</NavLink>
-          </nav>
-        )}
-        {user && (
-          <div className="bar-right">
-            <span className="user-chip">
-              <span className="ava" aria-hidden="true">{initials(user.displayName)}</span>
-              <span className="name">{user.displayName}</span>
-            </span>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={logout}>
-              Sair
+    <>
+      <header className="bar">
+        <div className="bar-in">
+          <Logo />
+          {user && (
+            <nav className="nav" aria-label="Principal">
+              <NavLink to="/" end>Início</NavLink>
+              <NavLink to="/corridas">Corridas</NavLink>
+            </nav>
+          )}
+          {user && (
+            <button type="button" className="search-btn" onClick={openSearch} aria-label="Buscar (Ctrl+K)">
+              <Icon name="search" />
+              <span className="search-btn-text">Pilotos, pistas, carros, corridas…</span>
+              <kbd>{isMac ? '⌘K' : 'Ctrl K'}</kbd>
             </button>
-          </div>
-        )}
-      </div>
-    </header>
+          )}
+          {user && (
+            <div className="bar-right">
+              <span className="user-chip">
+                <span className="ava" aria-hidden="true">{initials(user.displayName)}</span>
+                <span className="name">{user.displayName}</span>
+              </span>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={logout}>
+                Sair
+              </button>
+            </div>
+          )}
+        </div>
+      </header>
+      {user && (
+        <nav className="tabbar" aria-label="Navegação">
+          <NavLink to="/" end><Icon name="home" />Início</NavLink>
+          <NavLink to="/corridas"><Icon name="flag" />Corridas</NavLink>
+          <button type="button" onClick={openSearch}><Icon name="search" />Busca</button>
+          <NavLink to="/perfil"><Icon name="user" />Perfil</NavLink>
+        </nav>
+      )}
+      {user && searchOpen && <CommandPalette onClose={() => setSearchOpen(false)} />}
+    </>
   )
 }

@@ -8,14 +8,14 @@ public record PagedDto<T>(IReadOnlyList<T> Items, int Page, int PageSize, int To
 /// <summary>Linha da lista de corridas.</summary>
 public record RaceListItemDto(
     string EventId, string? Title, string? Track, string? Tier, string EventType,
-    DateTime StartsAt, string Status, int Splits, int Drivers);
+    DateTime StartsAt, string Status, int Splits, int Drivers, string? Classes);
 
 public record SplitSummaryDto(int SplitNo, int Drivers, int MostLapsCompleted, string? WinnerName, double? FastestLap);
 
 /// <summary>Cabeçalho da corrida + resumo de cada split.</summary>
 public record RaceDetailDto(
     string EventId, string? Title, string? Track, string? Tier, string EventType,
-    DateTime StartsAt, DateTime RaceEndsAt, string Status, int? TotalSplits,
+    DateTime StartsAt, DateTime RaceEndsAt, string Status, int? TotalSplits, string? Classes,
     IReadOnlyList<SplitSummaryDto> Splits);
 
 /// <summary>Linha de classificação de um piloto num split.</summary>

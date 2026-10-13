@@ -34,6 +34,8 @@ export interface RecentRace {
   startsAt: string
   splits: number
   drivers: number
+  /** "Hyper,GT3" — classes que correram. */
+  classes: string | null
 }
 
 export interface Overview {
@@ -103,6 +105,7 @@ export interface RaceListItem {
   status: string
   splits: number
   drivers: number
+  classes: string | null
 }
 
 export interface SplitSummary {
@@ -123,6 +126,7 @@ export interface RaceDetail {
   raceEndsAt: string
   status: 'Pending' | 'Ready' | 'Fetched' | 'Failed' | string
   totalSplits: number | null
+  classes: string | null
   splits: SplitSummary[]
 }
 
@@ -245,4 +249,35 @@ export interface DriverProfile {
   isMe: boolean
   stats: DriverStats
   races: Paged<DriverRace>
+}
+
+// ---------- busca global ----------
+
+export interface SearchDriver {
+  driverId: string
+  name: string
+  nationality: string | null
+  driverRankTitle: string | null
+  driverRankTier: number | null
+  races: number
+}
+
+export interface SearchTrack { track: string; races: number }
+export interface SearchCar { car: string; carClass: string | null; starts: number }
+
+export interface SearchRace {
+  eventId: string
+  title: string | null
+  track: string | null
+  tier: string | null
+  startsAt: string
+  classes: string | null
+}
+
+export interface SearchResults {
+  query: string
+  drivers: SearchDriver[]
+  tracks: SearchTrack[]
+  cars: SearchCar[]
+  races: SearchRace[]
 }

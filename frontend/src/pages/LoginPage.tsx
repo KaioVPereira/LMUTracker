@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import { TrackArt } from '../components/Bits'
 import { Logo } from '../components/TopBar'
 
 type Mode = 'login' | 'register'
@@ -45,6 +46,7 @@ export function LoginPage() {
   return (
     <div className="auth">
       <aside className="auth-hero">
+        <TrackArt className="auth-art" />
         <Logo />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <span className="eyebrow">Le Mans Ultimate</span>

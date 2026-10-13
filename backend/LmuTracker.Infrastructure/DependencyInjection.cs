@@ -25,6 +25,8 @@ public static class DependencyInjection
         services.AddSingleton<ITokenService, TokenService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<ILmuQueryService, LmuQueryService>();
+        services.AddMemoryCache();
+        services.AddScoped<ISearchService, SearchService>();
 
         // ---- Vínculo Steam (OpenID) ----
         services.Configure<SiteOptions>(config.GetSection(SiteOptions.Section));

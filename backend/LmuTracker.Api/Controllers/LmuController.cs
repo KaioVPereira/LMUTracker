@@ -9,11 +9,18 @@ namespace LmuTracker.Api.Controllers;
 public class LmuController : ApiControllerBase
 {
     private readonly ILmuQueryService _lmu;
+    private readonly ISearchService _search;
 
-    public LmuController(ILmuQueryService lmu)
+    public LmuController(ILmuQueryService lmu, ISearchService search)
     {
         _lmu = lmu;
+        _search = search;
     }
+
+    /// <summary>Busca global (paleta Ctrl+K): pilotos, pistas, carros e corridas.</summary>
+    [HttpGet("search")]
+    public async Task<ActionResult<SearchResultsDto>> Search([FromQuery] string? q, CancellationToken ct)
+        => Ok(await _search.SearchAsync(q, ct));
 
     /// <summary>Informações gerais do LMU para o dashboard (agenda e o que o scanner já juntou).</summary>
     [HttpGet("overview")]
@@ -25,11 +32,15 @@ public class LmuController : ApiControllerBase
     public async Task<ActionResult<MyDriverDto>> Me(CancellationToken ct)
         => Ok(await _lmu.GetMyDriverAsync(UserId, ct));
 
-    /// <summary>Corridas com resultado, mais recentes primeiro. tier: beginner|intermediate|advanced|weekly.</summary>
+    /// <summary>
+    /// Corridas com resultado, mais recentes primeiro. tier: beginner|intermediate|advanced|weekly;
+    /// track: nome da pista; car: modelo do carro.
+    /// </summary>
     [HttpGet("races")]
     public async Task<ActionResult<PagedDto<RaceListItemDto>>> Races(
-        [FromQuery] string? tier, [FromQuery] int page = 1, CancellationToken ct = default)
-        => Ok(await _lmu.ListRacesAsync(tier, page, ct));
+        [FromQuery] string? tier, [FromQuery] string? track, [FromQuery] string? car,
+        [FromQuery] int page = 1, CancellationToken ct = default)
+        => Ok(await _lmu.ListRacesAsync(tier, track, car, page, ct));
 
     [HttpGet("races/{eventId}")]
     public async Task<ActionResult<RaceDetailDto>> Race(string eventId, CancellationToken ct)

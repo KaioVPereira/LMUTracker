@@ -8,7 +8,7 @@ public record UpcomingRaceDto(
 /// <summary>Corrida já encerrada cujos resultados foram baixados.</summary>
 public record RecentRaceDto(
     string EventId, string? Title, string? Track, string? Tier,
-    DateTime StartsAt, int Splits, int Drivers);
+    DateTime StartsAt, int Splits, int Drivers, string? Classes);
 
 /// <summary>Visão geral do LMU para o dashboard: só agregados e dados de evento, sem dados de pilotos.</summary>
 public record OverviewDto(

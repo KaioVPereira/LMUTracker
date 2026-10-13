@@ -51,7 +51,8 @@ public sealed class LmuQueryService : ILmuQueryService
             .Select(e => new RecentRaceDto(
                 e.EventId, e.Title, e.Track, e.Tier, e.EventStartsAt ?? e.RaceStartsAt,
                 e.Splits.Count(),
-                e.Splits.Sum(s => s.DriverCount)))
+                e.Splits.Sum(s => s.DriverCount),
+                e.Classes))
             .ToListAsync(ct);
 
         return new OverviewDto(eventsTracked, racesFetched, resultsStored, driversIndexed,
@@ -99,12 +100,15 @@ public sealed class LmuQueryService : ILmuQueryService
 
     // ---------------------------------------------------------------- corridas
 
-    public async Task<PagedDto<RaceListItemDto>> ListRacesAsync(string? tier, int page, CancellationToken ct = default)
+    public async Task<PagedDto<RaceListItemDto>> ListRacesAsync(
+        string? tier, string? track, string? car, int page, CancellationToken ct = default)
     {
         page = Math.Max(1, page);
         var q = _db.ScanEvents.Where(e => e.Status == ScanEventStatus.Fetched && e.Splits.Any());
         if (tier == "weekly") q = q.Where(e => e.EventType == "weekly");
         else if (!string.IsNullOrWhiteSpace(tier)) q = q.Where(e => e.Tier == tier);
+        if (!string.IsNullOrWhiteSpace(track)) q = q.Where(e => e.Track == track);
+        if (!string.IsNullOrWhiteSpace(car)) q = q.Where(e => e.Splits.Any(s => s.Results.Any(r => r.CarType == car)));
 
         var total = await q.CountAsync(ct);
         var items = await q
@@ -113,7 +117,7 @@ public sealed class LmuQueryService : ILmuQueryService
             .Take(RacesPageSize)
             .Select(e => new RaceListItemDto(
                 e.EventId, e.Title, e.Track, e.Tier, e.EventType, e.EventStartsAt ?? e.RaceStartsAt,
-                e.Status.ToString(), e.Splits.Count(), e.Splits.Sum(s => s.DriverCount)))
+                e.Status.ToString(), e.Splits.Count(), e.Splits.Sum(s => s.DriverCount), e.Classes))
             .ToListAsync(ct);
 
         return new PagedDto<RaceListItemDto>(items, page, RacesPageSize, total);
@@ -134,7 +138,7 @@ public sealed class LmuQueryService : ILmuQueryService
             .ToListAsync(ct);
 
         return new RaceDetailDto(e.EventId, e.Title, e.Track, e.Tier, e.EventType,
-            e.EventStartsAt ?? e.RaceStartsAt, e.RaceEndsAt, e.Status.ToString(), e.TotalSplits, splits);
+            e.EventStartsAt ?? e.RaceStartsAt, e.RaceEndsAt, e.Status.ToString(), e.TotalSplits, e.Classes, splits);
     }
 
     public async Task<SplitResultsDto?> GetSplitAsync(string eventId, int splitNo, CancellationToken ct = default)

@@ -1,9 +1,9 @@
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import type { Paged, RaceListItem } from '../api/types'
-import { ErrorBox, TierChip } from '../components/Bits'
+import { ClassChips, EmptyState, ErrorBox, RowsSkeleton, TierChip } from '../components/Bits'
 import { Pager } from '../components/Pager'
 import { TopBar } from '../components/TopBar'
-import { fmtDateTime, fmtInt, typeLabel } from '../lib/format'
+import { fmtDayShort, fmtInt, fmtTime, typeLabel } from '../lib/format'
 import { useApi } from '../lib/useApi'
 
 const FILTERS = [
@@ -16,16 +16,24 @@ const FILTERS = [
 
 export function RacesPage() {
   const [params, setParams] = useSearchParams()
-  const navigate = useNavigate()
   const tier = params.get('nivel') ?? ''
+  const track = params.get('pista') ?? ''
+  const car = params.get('carro') ?? ''
   const page = Math.max(1, Number(params.get('pagina') ?? 1))
-  const { data, loading, error } = useApi<Paged<RaceListItem>>(
-    `/lmu/races?page=${page}${tier ? `&tier=${encodeURIComponent(tier)}` : ''}`)
+  const q = new URLSearchParams({ page: String(page) })
+  if (tier) q.set('tier', tier)
+  if (track) q.set('track', track)
+  if (car) q.set('car', car)
+  const { data, loading, error, reload } = useApi<Paged<RaceListItem>>(`/lmu/races?${q}`)
 
-  function go(next: { nivel?: string; pagina?: number }) {
+  function go(next: { nivel?: string; pista?: string; carro?: string; pagina?: number }) {
     const p = new URLSearchParams()
     const n = next.nivel ?? tier
+    const t = next.pista ?? track
+    const c = next.carro ?? car
     if (n) p.set('nivel', n)
+    if (t) p.set('pista', t)
+    if (c) p.set('carro', c)
     if ((next.pagina ?? 1) > 1) p.set('pagina', String(next.pagina))
     setParams(p)
   }
@@ -37,8 +45,15 @@ export function RacesPage() {
         <div className="page-head">
           <span className="eyebrow">Resultados</span>
           <h1>Corridas</h1>
-          <p className="note">Corridas oficiais já encerradas que o scanner guardou. Clique para ver os splits.</p>
+          <p className="note">Corridas oficiais já encerradas que o Pitwall guardou. Toque numa para ver os splits.</p>
         </div>
+
+        {(track || car) && (
+          <div className="chips" aria-label="Filtros ativos">
+            {track && <button type="button" className="chip active-filter" onClick={() => go({ pista: '', pagina: 1 })} aria-label={`Remover filtro de pista ${track}`}>Pista: {track} <span aria-hidden="true">✕</span></button>}
+            {car && <button type="button" className="chip active-filter" onClick={() => go({ carro: '', pagina: 1 })} aria-label={`Remover filtro de carro ${car}`}>Carro: {car} <span aria-hidden="true">✕</span></button>}
+          </div>
+        )}
 
         <div className="chips" role="tablist" aria-label="Nível">
           {FILTERS.map((f) => (
@@ -49,31 +64,28 @@ export function RacesPage() {
           ))}
         </div>
 
-        {error && <ErrorBox message={error} />}
-        <div className="tbl-wrap">
-          <table>
-            <thead>
-              <tr><th>Largada</th><th>Evento</th><th>Pista</th><th>Nível</th><th>Tipo</th><th className="num">Splits</th><th className="num">Pilotos</th></tr>
-            </thead>
-            <tbody>
-              {data?.items.length ? data.items.map((r) => (
-                <tr key={r.eventId} className="row-link" onClick={() => navigate(`/corridas/${r.eventId}`)}>
-                  <td className="mono">{fmtDateTime(r.startsAt)}</td>
-                  <td><Link to={`/corridas/${r.eventId}`} onClick={(e) => e.stopPropagation()}>{r.title ?? 'Corrida'}</Link></td>
-                  <td>{r.track ?? '—'}</td>
-                  <td><TierChip tier={r.tier} /></td>
-                  <td>{typeLabel(r.eventType)}</td>
-                  <td className="num">{r.splits}</td>
-                  <td className="num">{fmtInt(r.drivers)}</td>
-                </tr>
-              )) : (
-                <tr><td colSpan={7} className="empty">
-                  {loading ? 'Carregando…' : 'Nenhuma corrida com resultado ainda neste filtro.'}
-                </td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        {error && <ErrorBox message={error} onRetry={reload} />}
+        {loading ? <RowsSkeleton rows={8} /> : data?.items.length ? (
+          <div className="rows">
+            {data.items.map((r) => (
+              <Link key={r.eventId} to={`/corridas/${r.eventId}`} className="rowi">
+                <span className="rowi-time">{fmtTime(r.startsAt)}<small className="date">{fmtDayShort(r.startsAt)}</small></span>
+                <span className="rowi-main">
+                  <b>{r.title ?? 'Corrida'}</b>
+                  <span>{r.track ?? '—'} · {typeLabel(r.eventType)}</span>
+                </span>
+                <span className="rowi-side"><ClassChips classes={r.classes} /><TierChip tier={r.tier} /></span>
+                <span className="rowi-num">{r.splits} splits · {fmtInt(r.drivers)} pilotos</span>
+              </Link>
+            ))}
+          </div>
+        ) : !error && (
+          <EmptyState title="Nenhuma corrida neste filtro">
+            {track || car
+              ? 'Nenhuma corrida com resultado combina com esses filtros. Remova um deles para ver mais.'
+              : 'Ainda não há corrida com resultado neste nível. Elas aparecem aqui uns 10 minutos depois da bandeira.'}
+          </EmptyState>
+        )}
         {data && <Pager page={data.page} pageSize={data.pageSize} total={data.total} onPage={(p) => go({ pagina: p })} />}
       </div>
     </>

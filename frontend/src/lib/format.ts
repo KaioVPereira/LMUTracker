@@ -10,6 +10,9 @@ const dayOnly = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-dig
 export const fmtDateTime = (v: string) => dateTime.format(parseUtc(v))
 export const fmtTime = (v: string) => timeOnly.format(parseUtc(v))
 export const fmtDay = (v: string) => dayOnly.format(parseUtc(v))
+const dayShort = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' })
+/** "13/10" */
+export const fmtDayShort = (v: string) => dayShort.format(parseUtc(v))
 
 /** "em 12 min", "há 3 h", "agora". */
 export function fmtRelative(v: string, now = Date.now()): string {
@@ -103,4 +106,15 @@ export const finishLabel = (s: string | null) => (s ? (STATUS[s] ?? s) : '—')
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/)
   return ((parts[0]?.[0] ?? '') + (parts.length > 1 ? (parts[parts.length - 1][0] ?? '') : '')).toUpperCase() || '?'
+}
+
+/** Contagem regressiva: 3725000 ms -> "1:02:05"; 125000 -> "02:05". Negativo vira "00:00". */
+export function fmtClock(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  const mm = String(m).padStart(2, '0')
+  const ss = String(s).padStart(2, '0')
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`
 }
