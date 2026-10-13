@@ -124,8 +124,19 @@ public sealed class RaceOsClient
         using var resp = await SendAsync(HttpMethod.Get, $"/api/v1/special-events/{kind}", null, ct);
         if (!resp.IsSuccessStatusCode)
             throw new InvalidOperationException($"special-events/{kind} => HTTP {(int)resp.StatusCode}");
-        return await ReadJsonAsync<List<RaceOsSeries>>(resp, ct) ?? new();
+        var bytes = await resp.Content.ReadAsByteArrayAsync(ct);
+        var series = JsonSerializer.Deserialize<List<RaceOsSeries>>(bytes, Json) ?? new();
+        var instances = series.Sum(x => x.Events.Count);
+        _log.LogInformation("special-events/{Kind}: {Series} séries, {Events} instâncias.", kind, series.Count, instances);
+        // Formato ainda não confirmado: se nenhuma instância vier, mostra o começo do JSON (só metadados públicos
+        // da agenda) uma vez por processo, para ajustar o modelo.
+        if (instances == 0 && series.Count > 0 && _loggedSpecialSample.Add(kind))
+            _log.LogWarning("special-events/{Kind} amostra: {Sample}", kind,
+                Encoding.UTF8.GetString(bytes, 0, Math.Min(bytes.Length, 1500)));
+        return series;
     }
+
+    private static readonly HashSet<string> _loggedSpecialSample = new();
 
     // ---------- Expansão ----------
 
