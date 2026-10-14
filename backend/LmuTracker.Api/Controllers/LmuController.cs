@@ -148,7 +148,7 @@ public class LmuController : ApiControllerBase
         => Ok(await _lmu.GetMyDriverAsync(UserId, ct));
 
     /// <summary>
-    /// Corridas com resultado, mais recentes primeiro. tier: beginner|intermediate|advanced|weekly;
+    /// Corridas com resultado, mais recentes primeiro. tier: beginner|intermediate|advanced|weekly|special;
     /// track: nome da pista; car: modelo do carro.
     /// </summary>
     [HttpGet("races")]

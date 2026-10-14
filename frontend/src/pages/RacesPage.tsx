@@ -30,6 +30,7 @@ const FILTERS = [
   { key: 'intermediate', label: 'Intermediário' },
   { key: 'advanced', label: 'Avançado' },
   { key: 'weekly', label: 'Semanais' },
+  { key: 'special', label: 'Especiais' },
 ]
 
 export function RacesPage() {

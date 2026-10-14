@@ -16,7 +16,8 @@ namespace LmuTracker.Infrastructure.Scanning;
 public sealed class ScannerService
 {
     private static readonly string[] Tiers = { "beginner", "intermediate", "advanced" };
-    private static readonly string[] SpecialKinds = { "weekly" }; // "special" (eventos especiais) é o mesmo formato
+    // special-events/{kind}: as telas "Weekly Races" e "Special Events" do jogo (mesmo formato, mesma tela por dentro).
+    private static readonly string[] SpecialKinds = { "weekly", "special" };
     private const int MaxSplits = 40; // trava de segurança
 
     /// <summary>
@@ -106,19 +107,20 @@ public sealed class ScannerService
         }
         if (_db.ChangeTracker.HasChanges()) await _db.SaveChangesAsync(ct);
 
-        // Semanais: isoladas — se o formato vier diferente, só elas falham e as diárias seguem normais.
+        // Semanais e especiais: isoladas — se o formato vier diferente, só elas falham e as diárias seguem normais.
         foreach (var kind in SpecialKinds)
         {
             try
             {
                 var series = await _raceos.ListSpecialAsync(kind, ct);
-                var weekly = 0;
+                var added = 0;
                 foreach (var s in series)
                     foreach (var e in s.Events)
                         if (await UpsertEventAsync(e, e.Configuration?.Tier?.Name ?? s.Tier ?? kind, kind, ct, s.Title, s.Configuration))
-                            weekly++;
+                            added++;
                 if (_db.ChangeTracker.HasChanges()) await _db.SaveChangesAsync(ct);
-                found += weekly;
+                if (added > 0) _log.LogInformation("Scanner: {Count} corridas '{Kind}' novas.", added, kind);
+                found += added;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -318,17 +320,17 @@ public sealed class ScannerService
     }
 
     /// <summary>
-    /// Nº de splits pelo event/overview. Semanais: o jogo chama de "weekly", mas a série se declara "specialevent";
-    /// se um não responder, tenta o outro.
+    /// Nº de splits pelo event/overview. Semanais e especiais: a lista do jogo chama de "weekly"/"special", mas a
+    /// série se declara "specialevent" (é esse o tipo nos resultados do jogo); se um não responder, tenta o outro.
     /// </summary>
     private async Task<int> GetTotalSplitsAsync(ScanEvent e, CancellationToken ct)
     {
-        if (e.EventType != "weekly")
+        if (e.EventType is not ("weekly" or "special"))
             return (await _raceos.GetOverviewAsync(e.EventType, e.EventId, ct)).TotalSplits;
 
         Exception? last = null;
         var best = 0;
-        foreach (var type in new[] { "weekly", "specialevent" })
+        foreach (var type in new[] { e.EventType, "specialevent" })
         {
             try
             {

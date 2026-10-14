@@ -587,6 +587,7 @@ td.clsbar i { display: block; width: 4px; height: 26px; border-radius: 2px; back
 .tier-intermediate { color: #bcdcff; background: rgba(78, 161, 255, 0.15); }
 .tier-advanced { color: #f2ffb8; background: rgba(200, 240, 49, 0.15); }
 .tier-weekly { color: #e3cfff; background: rgba(197, 139, 255, 0.16); }
+.tier-special { color: #ffd9a8; background: rgba(255, 166, 77, 0.16); }
 .live { font-size: 11.5px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--bg0); background: var(--live); padding: 3px 10px; border-radius: 999px; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; align-self: flex-start; }
 .live::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--bg0); animation: pulse 1.6s ease-in-out infinite; }
 .next-tag { font-size: 11.5px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--bg0); background: var(--info); padding: 3px 10px; border-radius: 999px; align-self: flex-start; }
