@@ -17,7 +17,7 @@ public sealed class RaceOsClient
     // (número de voltas) e "laps" (lista volta a volta) no mesmo objeto, e eles colidiriam.
     // Campos de texto aceitam número também (FlexibleStringConverter): o RaceOS manda números como texto,
     // mas uma mudança no formato não pode derrubar a leitura do resultado inteiro.
-    internal static readonly JsonSerializerOptions Json = new() { Converters = { new FlexibleStringConverter() } };
+    internal static readonly JsonSerializerOptions Json = new() { Converters = { new FlexibleStringConverter(), new FlexibleIntConverter() } };
 
     private readonly IHttpClientFactory _factory;
     private readonly ISteamTicketProvider _ticket;

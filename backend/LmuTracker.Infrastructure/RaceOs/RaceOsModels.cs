@@ -221,6 +221,35 @@ public sealed class FlexibleStringConverter : JsonConverter<string?>
         writer.WriteStringValue(value);
 }
 
+/// <summary>
+/// Aceita inteiro, decimal (arredonda), texto ou null em campos int. Nos campeonatos <c>points</c> vem decimal
+/// (multiplicador de pontos da rodada) e travava o download do split inteiro.
+/// </summary>
+public sealed class FlexibleIntConverter : JsonConverter<int>
+{
+    public override int Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        switch (reader.TokenType)
+        {
+            case JsonTokenType.Number:
+                return reader.TryGetInt32(out var i) ? i : (int)Math.Round(reader.GetDouble());
+            case JsonTokenType.String:
+                return double.TryParse(reader.GetString(), System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var d) ? (int)Math.Round(d) : 0;
+            case JsonTokenType.True:
+                return 1;
+            case JsonTokenType.False:
+            case JsonTokenType.Null:
+                return 0;
+            default:
+                reader.Skip();
+                return 0;
+        }
+    }
+
+    public override void Write(Utf8JsonWriter writer, int value, JsonSerializerOptions options) => writer.WriteNumberValue(value);
+}
+
 /// <summary>Uma volta do piloto. O RaceOS manda tudo como texto (números inclusive).</summary>
 public sealed class LapRow
 {
