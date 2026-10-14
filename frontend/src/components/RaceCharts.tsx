@@ -8,38 +8,50 @@ import { SERIES } from '../lib/series'
 
 const W = 760, PL = 44, PR = 112, PT = 12, PB = 26
 
-function useHoverLap(maxLap: number) {
+/** Volta sob o cursor, de `minLap` (0 = largada, no gráfico de posições) até `maxLap`. */
+function useHoverLap(maxLap: number, minLap = 1) {
   const [lap, setLap] = useState<number | null>(null)
   const onMove = (e: MouseEvent<SVGRectElement>) => {
     const svg = e.currentTarget.ownerSVGElement as SVGSVGElement
     const rect = svg.getBoundingClientRect()
     const px = ((e.clientX - rect.left) / rect.width) * W
-    const l = Math.round(1 + ((px - PL) / (W - PL - PR)) * (maxLap - 1))
-    setLap(Math.max(1, Math.min(maxLap, l)))
+    const l = Math.round(minLap + ((px - PL) / (W - PL - PR)) * (maxLap - minLap))
+    setLap(Math.max(minLap, Math.min(maxLap, l)))
   }
   return { lap, onMove, clear: () => setLap(null) }
 }
 
 const shortName = (n: string) => (n.length > 14 ? `${n.slice(0, 13)}…` : n)
 
-/** Posição volta a volta. `byClass` = posição dentro da classe (quando a lista está filtrada por classe). */
+/**
+ * Posição volta a volta, começando na largada (volta 0 = posição no grid) — assim quem ganha ou perde muitos lugares
+ * na primeira volta aparece. `byClass` = posição dentro da classe (quando a lista está filtrada por classe).
+ */
 export function PositionChart({ drivers, selected, byClass }: { drivers: SplitDriverLaps[]; selected: string[]; byClass: boolean }) {
   const maxLap = Math.max(1, ...drivers.flatMap((d) => d.laps.map((l) => l.lap)))
-  const maxPos = Math.max(1, drivers.length)
+  const maxPos = Math.max(1, drivers.length, ...drivers.map((d) => (byClass ? d.classGridPos : d.gridPos) ?? 0))
   const H = Math.min(420, 120 + maxPos * 9)
-  const x = (lap: number) => PL + ((lap - 1) / Math.max(1, maxLap - 1)) * (W - PL - PR)
+  const x = (lap: number) => PL + (lap / maxLap) * (W - PL - PR)
   const y = (p: number) => PT + ((p - 1) / Math.max(1, maxPos - 1)) * (H - PT - PB)
-  const pos = (l: { position: number | null; classPosition: number | null }) => (byClass ? l.classPosition : l.position)
-  const hover = useHoverLap(maxLap)
+  const hover = useHoverLap(maxLap, 0)
 
-  const line = (d: SplitDriverLaps) => d.laps
-    .filter((l) => pos(l) !== null)
-    .map((l, i) => `${i ? 'L' : 'M'}${x(l.lap).toFixed(1)} ${y(pos(l)!).toFixed(1)}`).join(' ')
+  /** Pontos do piloto: o grid como volta 0 e depois a posição ao fim de cada volta. */
+  const points = (d: SplitDriverLaps) => {
+    const grid = byClass ? d.classGridPos : d.gridPos
+    const laps = d.laps.map((l) => ({ lap: l.lap, p: byClass ? l.classPosition : l.position }))
+    return [...(grid ? [{ lap: 0, p: grid }] : []), ...laps].filter((q): q is { lap: number; p: number } => q.p !== null)
+  }
+  const line = (d: SplitDriverLaps) => points(d).map((q, i) => `${i ? 'L' : 'M'}${x(q.lap).toFixed(1)} ${y(q.p).toFixed(1)}`).join(' ')
 
   const sel = selected.map((id) => drivers.find((d) => d.resultId === id)).filter(Boolean) as SplitDriverLaps[]
   const ticks = [1, ...[5, 10, 15, 20, 25, 30, 35, 40].filter((t) => t < maxPos), maxPos]
   const tip = hover.lap !== null ? sel
-    .map((d, i) => ({ d, i, p: pos(d.laps.find((l) => l.lap === hover.lap) ?? { position: null, classPosition: null }) }))
+    .map((d) => {
+      const pts = points(d)
+      const at = pts.find((q) => q.lap === hover.lap)
+      const grid = pts.find((q) => q.lap === 0)
+      return { d, p: at?.p ?? null, gained: at && grid && hover.lap! > 0 ? grid.p - at.p : null }
+    })
     .filter((t) => t.p !== null).sort((a, b) => a.p! - b.p!) : []
 
   return (
@@ -56,29 +68,37 @@ export function PositionChart({ drivers, selected, byClass }: { drivers: SplitDr
         ))}
         {sel.map((d) => {
           const c = SERIES[selected.indexOf(d.resultId)]
-          const last = [...d.laps].reverse().find((l) => pos(l) !== null)
+          const pts = points(d)
+          const last = pts[pts.length - 1]
+          const start = pts[0]?.lap === 0 ? pts[0] : null
           return (
             <g key={d.resultId}>
               <path d={line(d)} fill="none" stroke={c} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
+              {start && <circle cx={x(0)} cy={y(start.p)} r={3} fill={c} className="ring" />}
               {last && (
                 <>
-                  <circle cx={x(last.lap)} cy={y(pos(last)!)} r={4} fill={c} className="ring" />
-                  <text x={x(last.lap) + 8} y={y(pos(last)!) + 4} className="series-label">{shortName(d.name)}</text>
+                  <circle cx={x(last.lap)} cy={y(last.p)} r={4} fill={c} className="ring" />
+                  <text x={x(last.lap) + 8} y={y(last.p) + 4} className="series-label">{shortName(d.name)}</text>
                 </>
               )}
             </g>
           )
         })}
         {hover.lap !== null && <line x1={x(hover.lap)} x2={x(hover.lap)} y1={PT} y2={H - PB} className="cross" />}
-        <text x={PL} y={H - 6} className="axis">volta 1</text>
+        <line x1={x(0)} x2={x(0)} y1={PT} y2={H - PB} className="grid" />
+        <text x={PL} y={H - 6} className="axis">largada</text>
+        {maxLap > 2 && <text x={x(1)} y={H - 6} textAnchor="middle" className="axis">1</text>}
         <text x={W - PR} y={H - 6} textAnchor="end" className="axis">volta {maxLap}</text>
         <rect x={PL} y={PT} width={W - PL - PR} height={H - PT - PB} fill="transparent" onMouseMove={hover.onMove} onMouseLeave={hover.clear} />
       </svg>
       {hover.lap !== null && tip.length > 0 && (
-        <div className="chart-tip" style={{ left: `${(x(hover.lap) / W) * 100}%`, top: '8%', transform: 'translate(-50%, 0)' }}>
-          <b>Volta {hover.lap}</b>
+        <div className="chart-tip" style={{ left: `${(x(hover.lap) / W) * 100}%`, top: '8%', transform: `translate(${hover.lap === 0 ? '0' : '-50%'}, 0)` }}>
+          <b>{hover.lap === 0 ? 'Largada (grid)' : `Volta ${hover.lap}`}</b>
           {tip.map((t) => (
-            <span key={t.d.resultId}><i className="sw" style={{ background: SERIES[selected.indexOf(t.d.resultId)] }} />P{t.p} · {t.d.name}</span>
+            <span key={t.d.resultId}>
+              <i className="sw" style={{ background: SERIES[selected.indexOf(t.d.resultId)] }} />P{t.p} · {t.d.name}
+              {t.gained !== null && t.gained !== 0 && <em className={t.gained > 0 ? 'up' : 'down'}> {t.gained > 0 ? `+${t.gained}` : t.gained} desde a largada</em>}
+            </span>
           ))}
         </div>
       )}

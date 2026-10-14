@@ -204,7 +204,7 @@ export function RacePage() {
                     : <PaceChart drivers={lapDrivers} selected={selected} />}
                   <p className="note">
                     {tab === 'posicoes'
-                      ? `Posição ${cls ? 'na classe' : 'geral'} ao fim de cada volta. Em cinza, os outros pilotos ${cls ? 'da classe' : 'do split'}. Escolha até ${MAX_SERIES} para destacar.`
+                      ? `Posição ${cls ? 'na classe' : 'geral'} na largada (grid) e ao fim de cada volta. Em cinza, os outros pilotos ${cls ? 'da classe' : 'do split'}. Escolha até ${MAX_SERIES} para destacar.`
                       : 'Tempo de cada volta, sem a 1ª, sem as de pit e sem as acima de 107% da melhor volta do piloto (rodadas, bandeira amarela).'}
                   </p>
                 </div>
