@@ -2,7 +2,7 @@ import { useEffect, useRef, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import type { CarListItem, CarRanking, Country, DriverRankingKind, Leaderboard, Ranking, RankingRow, SearchTrack } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
-import { ClassChip, EmptyState, ErrorBox, Rank, RowsSkeleton } from '../components/Bits'
+import { ClassChip, EmptyState, ErrorBox, MoreButton, Rank, RowsSkeleton } from '../components/Bits'
 import { LeaderboardTable } from '../components/Leaderboard'
 import { TopBar } from '../components/TopBar'
 import { classShort } from '../lib/classes'
@@ -10,6 +10,8 @@ import { CLASS_TABS, SETUP_TABS } from '../lib/filters'
 import { useFollows } from '../lib/follows'
 import { countryName, fmtPct } from '../lib/format'
 import { useApi } from '../lib/useApi'
+import { useLoadMore } from '../lib/useLoadMore'
+import { Flag } from '../components/Flag'
 
 type TabKey = 'voltas' | 'dr' | 'sr' | 'vitorias' | 'poles' | 'recuperacao' | 'em-alta' | 'limpos' | 'ativos' | 'carros'
 
@@ -139,7 +141,8 @@ function LapsPanel({ params, set }: { params: URLSearchParams; set: SetParams })
   if (setup) q.set('setup', setup)
   if (car) q.set('car', car)
   if (country) q.set('country', country)
-  const lb = useApi<Leaderboard>(track ? `/lmu/leaderboard?${q}` : null)
+  const lbPath = track ? `/lmu/leaderboard?${q}` : null
+  const lb = useApi<Leaderboard>(lbPath)
   const carsOfClass = (cars.data ?? []).filter((c) => !cls || classShort(c.carClass).toLowerCase() === cls)
 
   return (
@@ -162,7 +165,7 @@ function LapsPanel({ params, set }: { params: URLSearchParams; set: SetParams })
       </div>
       <Chips label="Classe" items={CLASS_TABS} value={cls} onPick={(k) => set({ classe: k })} classes />
       <Chips label="Setup" items={SETUP_TABS} value={setup} onPick={(k) => set({ setup: k })} />
-      <LeaderboardTable data={lb.data} loading={lb.loading || tracks.loading} />
+      <LeaderboardTable data={lb.data} loading={lb.loading || tracks.loading} path={lbPath} />
     </div>
   )
 }
@@ -241,10 +244,12 @@ function DriverRankingPanel({ kind, params, set }: { kind: DriverRankingKind; pa
   if (cls) q.set('class', cls)
   if (country) q.set('country', country)
   if (me) q.set('me', me)
-  const r = useApi<Ranking>(`/lmu/rankings/drivers/${kind}?${q}`)
+  const path = `/lmu/rankings/drivers/${kind}?${q}`
+  const r = useApi<Ranking>(path)
   const cols = columnsFor(kind)
   const data = r.data
-  const meOutside = data?.me && !data.rows.some((x) => x.rank === data.me!.rank) ? data.me : null
+  const paged = useLoadMore(path, data, (d) => d.rows, (d) => d.total)
+  const meOutside = data?.me && !paged.rows.some((x) => x.rank === data.me!.rank) ? data.me : null
 
   const row = (x: RankingRow) => {
     const isMe = me !== null && x.driverId === me
@@ -253,7 +258,7 @@ function DriverRankingPanel({ kind, params, set }: { kind: DriverRankingKind; pa
         <td className={`num pos-cell${x.rank <= 3 ? ` lb-top lb-${x.rank}` : ''}`}>{x.rank.toLocaleString('pt-BR')}</td>
         <td>
           {x.driverId ? <Link to={`/pilotos/${x.driverId}`}>{x.name}</Link> : x.name}
-          {x.nationality && <span className="pill nat">{x.nationality}</span>}
+          <Flag code={x.nationality} />
           {isMe && <span className="pill me">você</span>}
         </td>
         {cols.map((c, i) => <td key={c.h} className={[c.num ? 'num' : '', i === 0 ? 'rk-main' : ''].join(' ').trim() || undefined}>{c.cell(x)}</td>)}
@@ -288,11 +293,12 @@ function DriverRankingPanel({ kind, params, set }: { kind: DriverRankingKind; pa
                 <tr><th className="num">#</th><th>Piloto</th>{cols.map((c) => <th key={c.h} className={c.num ? 'num' : undefined}>{c.h}</th>)}</tr>
               </thead>
               <tbody>
-                {data.rows.map(row)}
+                {paged.rows.map(row)}
                 {meOutside && <><tr className="rk-gap" aria-hidden="true"><td colSpan={cols.length + 2}>⋯</td></tr>{row(meOutside)}</>}
               </tbody>
             </table>
           </div>
+          {paged.hasMore && <MoreButton shown={paged.rows.length} total={paged.total} loading={paged.loading} onClick={paged.loadMore} />}
           <p className="note">
             {data.total.toLocaleString('pt-BR')} pilotos neste recorte{data.country && <> · país: {countryName(data.country)}</>}
             {data.minStarts > 0 && <> · mínimo de {data.minStarts} corridas no período</>}

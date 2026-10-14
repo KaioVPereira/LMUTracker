@@ -26,6 +26,7 @@ public static class DependencyInjection
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<ILmuQueryService, LmuQueryService>();
         services.AddMemoryCache();
+        services.AddSingleton<SnapshotCache>();
         services.AddScoped<ISearchService, SearchService>();
         services.AddScoped<IHomeService, HomeService>();
         services.AddScoped<IDriverStatsService, DriverStatsService>();

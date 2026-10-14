@@ -1,66 +1,72 @@
 using LmuTracker.Application.Lmu;
 using LmuTracker.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 
 namespace LmuTracker.Infrastructure.Services;
 
 /// <summary>
 /// Destaques da tela inicial. É a mesma resposta para todo mundo e cada bloco agrega milhares de resultados —
-/// fica 60 s em cache, então o custo não cresce com o número de pessoas olhando.
+/// fica no <see cref="SnapshotCache"/> (recalculado em segundo plano a cada minuto de uso), então ninguém espera
+/// as consultas e o custo não cresce com o número de pessoas olhando.
 /// </summary>
 public sealed class HomeService : IHomeService
 {
     private const string FinishedNormally = "Finished Normally";
-    private static readonly TimeSpan CacheFor = TimeSpan.FromSeconds(60);
+    public const string CacheKey = "home";
+    public static readonly TimeSpan CacheFor = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan Week = TimeSpan.FromDays(7);
     private static readonly TimeSpan Day = TimeSpan.FromHours(24);
 
-    private readonly AppDbContext _db;
-    private readonly IMemoryCache _cache;
+    private readonly SnapshotCache _cache;
 
-    public HomeService(AppDbContext db, IMemoryCache cache)
-    {
-        _db = db;
-        _cache = cache;
-    }
+    public HomeService(SnapshotCache cache) => _cache = cache;
 
-    public async Task<HomeDto> GetAsync(CancellationToken ct = default) =>
-        (await _cache.GetOrCreateAsync("home", async entry =>
-        {
-            entry.AbsoluteExpirationRelativeToNow = CacheFor;
-            return await BuildAsync(ct);
-        }))!;
+    public Task<HomeDto> GetAsync(CancellationToken ct = default) => _cache.GetAsync(CacheKey, CacheFor, BuildAsync, ct);
 
-    private async Task<HomeDto> BuildAsync(CancellationToken ct)
+    public static async Task<HomeDto> BuildAsync(AppDbContext db, CancellationToken ct)
     {
         var now = DateTime.UtcNow;
         var weekAgo = now - Week;
         var dayAgo = now - Day;
 
         // Todo resultado gravado conta — inclusive de corridas que voltaram à fila para ganhar detalhe novo.
-        var results = _db.RaceResults.AsNoTracking();
+        var results = db.RaceResults.AsNoTracking();
 
         // ---------- recordes: melhor volta por pista, classe e tipo de setup (fixo × livre) ----------
-        var records = await results
-            .Where(r => r.BestLapTime != null && r.RaceSplit.ScanEvent.Track != null
-                        && (r.RaceSplit.ScanEvent.EventStartsAt ?? r.RaceSplit.ScanEvent.RaceStartsAt) >= weekAgo)
+        // Em duas etapas: o tempo mínimo de cada grupo (um GROUP BY só) e depois as linhas com esses tempos.
+        // O "First() de cada grupo" direto vira uma subconsulta por grupo, cada uma relendo a semana inteira —
+        // era o que estourava o tempo em produção.
+        var weekLaps = results.Where(r => r.BestLapTime != null && r.RaceSplit.ScanEvent.Track != null
+                                          && (r.RaceSplit.ScanEvent.EventStartsAt ?? r.RaceSplit.ScanEvent.RaceStartsAt) >= weekAgo);
+        var bestByGroup = await weekLaps
             .GroupBy(r => new
             {
                 Track = r.RaceSplit.ScanEvent.Track!,
                 r.CarClass,
                 Fixed = (r.RaceSplit.ScanEvent.Title ?? "").Contains("Fixed"),
             })
-            .Select(g => g.OrderBy(r => r.BestLapTime)
-                .Select(r => new
-                {
-                    g.Key.Track, g.Key.CarClass, g.Key.Fixed, Lap = r.BestLapTime!.Value,
-                    r.SteamId, r.Name, r.Nationality, r.CarType, r.RaceSplit.ScanEvent.EventId,
-                    SetAt = r.RaceSplit.ScanEvent.EventStartsAt ?? r.RaceSplit.ScanEvent.RaceStartsAt,
-                    r.RaceSplit.SplitNo,
-                })
-                .First())
+            .Select(g => new { g.Key.Track, g.Key.CarClass, g.Key.Fixed, Lap = g.Min(r => r.BestLapTime!.Value) })
             .ToListAsync(ct);
+        var bestLaps = bestByGroup.Select(b => b.Lap).Distinct().ToList();
+        var candidates = await weekLaps
+            .Where(r => bestLaps.Contains(r.BestLapTime!.Value))
+            .Select(r => new
+            {
+                Track = r.RaceSplit.ScanEvent.Track!, r.CarClass, Fixed = (r.RaceSplit.ScanEvent.Title ?? "").Contains("Fixed"),
+                Lap = r.BestLapTime!.Value, r.SteamId, r.Name, r.Nationality, r.CarType, r.RaceSplit.ScanEvent.EventId,
+                SetAt = r.RaceSplit.ScanEvent.EventStartsAt ?? r.RaceSplit.ScanEvent.RaceStartsAt,
+                r.RaceSplit.SplitNo,
+            })
+            .ToListAsync(ct);
+        // Empate no mesmo tempo: fica quem fez primeiro.
+        var records = bestByGroup
+            .Select(b => candidates
+                .Where(c => c.Track == b.Track && c.CarClass == b.CarClass && c.Fixed == b.Fixed && c.Lap == b.Lap)
+                .OrderBy(c => c.SetAt)
+                .FirstOrDefault())
+            .Where(c => c is not null)
+            .Select(c => c!)
+            .ToList();
 
         // ---------- vencedores do split 1, por classe ----------
         var winnersRaw = await results
@@ -154,7 +160,7 @@ public sealed class HomeService : IHomeService
             .Where(s => !string.IsNullOrEmpty(s))
             .Distinct()
             .ToList();
-        var ids = await _db.Drivers.AsNoTracking()
+        var ids = await db.Drivers.AsNoTracking()
             .Where(d => steamIds.Contains(d.SteamId))
             .ToDictionaryAsync(d => d.SteamId, d => d.Id, ct);
         Guid? Id(string? steam) => steam is not null && ids.TryGetValue(steam, out var id) ? id : null;

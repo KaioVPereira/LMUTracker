@@ -2,7 +2,6 @@ using LmuTracker.Application.Lmu;
 using LmuTracker.Domain.Entities;
 using LmuTracker.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 
 namespace LmuTracker.Infrastructure.Services;
 
@@ -14,12 +13,13 @@ public sealed class ExtrasService : IExtrasService
 {
     private const string FinishedNormally = "Finished Normally";
     private static readonly TimeSpan CacheFor = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan LeaderboardFor = TimeSpan.FromSeconds(60);
     private const int MaxTake = 100;
 
     private readonly AppDbContext _db;
-    private readonly IMemoryCache _cache;
+    private readonly SnapshotCache _cache;
 
-    public ExtrasService(AppDbContext db, IMemoryCache cache)
+    public ExtrasService(AppDbContext db, SnapshotCache cache)
     {
         _db = db;
         _cache = cache;
@@ -43,43 +43,55 @@ public sealed class ExtrasService : IExtrasService
         _ => q,
     };
 
-    private async Task<Dictionary<string, Guid>> DriverIdsAsync(IEnumerable<string?> steamIds, CancellationToken ct)
+    private static async Task<Dictionary<string, Guid>> DriverIdsAsync(AppDbContext db, IEnumerable<string?> steamIds,
+        CancellationToken ct)
     {
         var list = steamIds.Where(s => !string.IsNullOrEmpty(s)).Select(s => s!).Distinct().ToList();
         if (list.Count == 0) return new();
-        return await _db.Drivers.AsNoTracking().Where(d => list.Contains(d.SteamId))
+        return await db.Drivers.AsNoTracking().Where(d => list.Contains(d.SteamId))
             .ToDictionaryAsync(d => d.SteamId, d => d.Id, ct);
     }
 
     // ---------------------------------------------------------------- rankings
 
+    private sealed record LapEntry(string SteamId, double Lap);
+
+    private static IQueryable<RaceResult> LapsOf(AppDbContext db, string? track, string? carClass, string? car, string? setup,
+        string? country)
+    {
+        var q = db.RaceResults.AsNoTracking().Where(r => r.BestLapTime != null && r.SteamId != null);
+        if (!string.IsNullOrWhiteSpace(track)) q = q.Where(r => r.RaceSplit.ScanEvent.Track == track);
+        if (!string.IsNullOrWhiteSpace(car)) q = q.Where(r => r.CarType == car);
+        if (country is not null) q = q.Where(r => r.Nationality == country);
+        return OfSetup(OfClass(q, carClass), setup);
+    }
+
     public async Task<LeaderboardDto> LeaderboardAsync(string? track, string? carClass, string? car, string? setup, string? country,
-        int take, CancellationToken ct = default)
+        int skip, int take, CancellationToken ct = default)
     {
         take = Math.Clamp(take, 1, MaxTake);
+        skip = Math.Max(skip, 0);
         setup = setup is "fixed" or "open" ? setup : null;
         country = RankingsService.NormCountry(country);
-        var key = $"lb:{track}|{carClass}|{car}|{setup}|{country}|{take}";
-        return (await _cache.GetOrCreateAsync(key, async entry =>
-        {
-            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(60);
-            var q = _db.RaceResults.AsNoTracking().Where(r => r.BestLapTime != null && r.SteamId != null);
-            if (!string.IsNullOrWhiteSpace(track)) q = q.Where(r => r.RaceSplit.ScanEvent.Track == track);
-            if (!string.IsNullOrWhiteSpace(car)) q = q.Where(r => r.CarType == car);
-            if (country is not null) q = q.Where(r => r.Nationality == country);
-            q = OfSetup(OfClass(q, carClass), setup);
+        var filters = $"{track}|{carClass}|{car}|{setup}|{country}";
 
-            // 1) A melhor volta de cada piloto no recorte (GroupBy + Min traduz para SQL); 2) os detalhes da corrida
-            // em que cada um dos primeiros fez essa volta.
-            var top = await q
+        // 1) A melhor volta de cada piloto no recorte, já ordenada (GroupBy + Min traduz para SQL) — a lista inteira
+        // fica em cache, então trocar de página não volta a agregar; 2) os detalhes da corrida em que cada piloto
+        // da página fez essa volta.
+        var order = await _cache.GetAsync($"lb:order:{filters}", LeaderboardFor, (db, ct) =>
+            LapsOf(db, track, carClass, car, setup, country)
                 .GroupBy(r => r.SteamId!)
                 .Select(g => new { SteamId = g.Key, Lap = g.Min(r => r.BestLapTime!.Value) })
-                .OrderBy(x => x.Lap)
-                .Take(take)
-                .ToListAsync(ct);
-            var topIds = top.Select(t => t.SteamId).ToList();
-            var detail = (await q
-                    .Where(r => topIds.Contains(r.SteamId!))
+                .OrderBy(x => x.Lap).ThenBy(x => x.SteamId)
+                .Select(x => new LapEntry(x.SteamId, x.Lap))
+                .ToListAsync(ct), ct);
+
+        return await _cache.GetAsync($"lb:{filters}|{skip}|{take}", LeaderboardFor, async (db, ct) =>
+        {
+            var page = order.Skip(skip).Take(take).ToList();
+            var pageIds = page.Select(t => t.SteamId).ToList();
+            var detail = (await LapsOf(db, track, carClass, car, setup, country)
+                    .Where(r => pageIds.Contains(r.SteamId!))
                     .Select(r => new
                     {
                         r.SteamId, r.Name, r.Nationality, r.CarType, r.CarClass, Lap = r.BestLapTime!.Value,
@@ -89,28 +101,32 @@ public sealed class ExtrasService : IExtrasService
                     .ToListAsync(ct))
                 .GroupBy(x => x.SteamId!)
                 .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Lap).ThenBy(x => x.At).First());
-            var best = top.Where(t => detail.ContainsKey(t.SteamId)).Select(t => detail[t.SteamId]).ToList();
-            var drivers = await q.Select(r => r.SteamId).Distinct().CountAsync(ct);
-            var ids = await DriverIdsAsync(best.Select(b => b.SteamId), ct);
-            var first = best.FirstOrDefault()?.Lap;
-            var rows = best.Select((b, i) => new LeaderboardRowDto(i + 1, ids.TryGetValue(b.SteamId!, out var id) ? id : null,
-                b.Name, b.Nationality, b.CarType, b.CarClass, b.Lap, first is null || i == 0 ? null : Math.Round(b.Lap - first.Value, 3),
-                b.EventId, b.At, b.SplitNo)).ToList();
-            return new LeaderboardDto(track, carClass, car, setup ?? "all", country, drivers, rows);
-        }))!;
+            var ids = await DriverIdsAsync(db, pageIds, ct);
+            var first = order.FirstOrDefault()?.Lap;
+            var rows = page.Select((t, i) => (t.SteamId, Rank: skip + i + 1))
+                .Where(x => detail.ContainsKey(x.SteamId))
+                .Select(x =>
+                {
+                    var b = detail[x.SteamId];
+                    return new LeaderboardRowDto(x.Rank, ids.TryGetValue(x.SteamId, out var id) ? id : null,
+                        b.Name, b.Nationality, b.CarType, b.CarClass, b.Lap,
+                        first is null || x.Rank == 1 ? null : Math.Round(b.Lap - first.Value, 3), b.EventId, b.At, b.SplitNo);
+                })
+                .ToList();
+            return new LeaderboardDto(track, carClass, car, setup ?? "all", country, order.Count, rows);
+        }, ct);
     }
 
     // ---------------------------------------------------------------- pista
 
     public async Task<TrackDetailDto?> TrackAsync(string track, CancellationToken ct = default) =>
-        await _cache.GetOrCreateAsync($"track:{track}", async entry =>
+        await _cache.GetAsync<TrackDetailDto?>($"track:{track}", CacheFor, async (db, ct) =>
         {
-            entry.AbsoluteExpirationRelativeToNow = CacheFor;
-            var results = _db.RaceResults.AsNoTracking().Where(r => r.RaceSplit.ScanEvent.Track == track);
+            var results = db.RaceResults.AsNoTracking().Where(r => r.RaceSplit.ScanEvent.Track == track);
             var starts = await results.CountAsync(ct);
             if (starts == 0) return null;
 
-            var events = _db.ScanEvents.AsNoTracking().Where(e => e.Track == track && e.Splits.Any());
+            var events = db.ScanEvents.AsNoTracking().Where(e => e.Track == track && e.Splits.Any());
             var races = await events.CountAsync(ct);
             var first = await events.MinAsync(e => (DateTime?)(e.EventStartsAt ?? e.RaceStartsAt), ct);
             var last = await events.MaxAsync(e => (DateTime?)(e.EventStartsAt ?? e.RaceStartsAt), ct);
@@ -149,22 +165,21 @@ public sealed class ExtrasService : IExtrasService
                     .GroupBy(r => r.CarClass!).Select(g => new { g.Key, N = g.Count() }).ToListAsync(ct))
                 .OrderByDescending(x => x.N).Select(x => new ClassShareDto(x.Key, x.N)).ToList();
 
-            var ids = await DriverIdsAsync(records.Select(r => r.SteamId), ct);
+            var ids = await DriverIdsAsync(db, records.Select(r => r.SteamId), ct);
             return new TrackDetailDto(track, races, starts, drivers, first, last,
                 records.OrderBy(r => r.CarClass).ThenBy(r => r.Fixed)
                     .Select(r => new TrackRecordDto(r.CarClass, r.Fixed, r.Lap,
                         r.SteamId is not null && ids.TryGetValue(r.SteamId, out var id) ? id : null, r.Name, r.CarType, r.At, r.EventId))
                     .ToList(),
                 cars, classes);
-        });
+        }, ct);
 
     // ---------------------------------------------------------------- carro
 
     public async Task<CarDetailDto?> CarAsync(string car, CancellationToken ct = default) =>
-        await _cache.GetOrCreateAsync($"car:{car}", async entry =>
+        await _cache.GetAsync<CarDetailDto?>($"car:{car}", CacheFor, async (db, ct) =>
         {
-            entry.AbsoluteExpirationRelativeToNow = CacheFor;
-            var results = _db.RaceResults.AsNoTracking().Where(r => r.CarType == car);
+            var results = db.RaceResults.AsNoTracking().Where(r => r.CarType == car);
             var stats = await results.GroupBy(_ => 1).Select(g => new
             {
                 Starts = g.Count(),
@@ -200,20 +215,19 @@ public sealed class ExtrasService : IExtrasService
                 .Take(10)
                 .ToListAsync(ct);
 
-            var ids = await DriverIdsAsync(tracks.Select(t => t.Best?.SteamId).Concat(top.Select(t => t.SteamId)), ct);
+            var ids = await DriverIdsAsync(db, tracks.Select(t => t.Best?.SteamId).Concat(top.Select(t => t.SteamId)), ct);
             Guid? Id(string? s) => s is not null && ids.TryGetValue(s, out var id) ? id : null;
             return new CarDetailDto(car, stats.Class, stats.Starts, drivers, stats.Wins, stats.Podiums, stats.Dnfs,
                 stats.Avg is null ? null : Math.Round(stats.Avg.Value, 2),
                 tracks.OrderByDescending(t => t.Starts)
                     .Select(t => new CarTrackDto(t.Track, t.Starts, t.Wins, t.Best?.Lap, Id(t.Best?.SteamId), t.Best?.Name)).ToList(),
                 top.Select(t => new CarDriverDto(Id(t.SteamId), t.Name ?? "—", t.Nat, t.Starts, t.Wins, t.Podiums)).ToList());
-        });
+        }, ct);
 
     public async Task<IReadOnlyList<CarListItemDto>> CarsAsync(CancellationToken ct = default) =>
-        (await _cache.GetOrCreateAsync("cars", async entry =>
+        await _cache.GetAsync<IReadOnlyList<CarListItemDto>>("cars", TimeSpan.FromMinutes(10), async (db, ct) =>
         {
-            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10);
-            return (await _db.RaceResults.AsNoTracking()
+            return (await db.RaceResults.AsNoTracking()
                     .Where(r => r.CarType != null && r.CarType != "")
                     .GroupBy(r => new { r.CarType, r.CarClass })
                     .Select(g => new { g.Key.CarType, g.Key.CarClass, N = g.Count() })
@@ -221,7 +235,7 @@ public sealed class ExtrasService : IExtrasService
                 .OrderBy(x => x.CarClass).ThenByDescending(x => x.N)
                 .Select(x => new CarListItemDto(x.CarType!, x.CarClass, x.N))
                 .ToList();
-        }))!;
+        }, ct);
 
     // ---------------------------------------------------------------- seguindo
 

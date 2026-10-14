@@ -31,9 +31,9 @@ public interface IRankingsService
     /// <summary>
     /// kind: dr | sr | wins | risers | clean | active | poles | gains. period: 7d | 30d | all. carClass: hyper|lmp2|lmp3|gt3 (não vale
     /// para dr/sr, que são do piloto). country: nacionalidade (ex.: "BR") — a posição passa a ser dentro do país.
-    /// <paramref name="me"/>: id do piloto a destacar.
+    /// <paramref name="me"/>: id do piloto a destacar. <paramref name="skip"/>/<paramref name="take"/>: paginação.
     /// </summary>
-    Task<RankingDto?> DriversAsync(string kind, string? carClass, string? period, string? country, int take, Guid? me,
+    Task<RankingDto?> DriversAsync(string kind, string? carClass, string? period, string? country, int skip, int take, Guid? me,
         CancellationToken ct = default);
 
     /// <summary>country: conta só as largadas de pilotos daquele país.</summary>

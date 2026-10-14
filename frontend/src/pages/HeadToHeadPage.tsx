@@ -4,6 +4,7 @@ import { ClassChip, EmptyState, ErrorBox, Loading, Rank } from '../components/Bi
 import { TopBar } from '../components/TopBar'
 import { finishLabel, fmtDateTime, fmtLap } from '../lib/format'
 import { useApi } from '../lib/useApi'
+import { Flag } from '../components/Flag'
 
 const pos = (status: string | null, classPos: number | null) =>
   status === 'Finished Normally' && classPos ? `P${classPos}` : finishLabel(status)
@@ -91,7 +92,7 @@ function Side({ s, align }: { s: HeadToHeadSide; align: 'left' | 'right' }) {
   return (
     <div className={`h2h-side is-${align}`}>
       <Link to={`/pilotos/${s.driverId}`} className="plain"><h2>{s.name}</h2></Link>
-      <span className="driver-sub">{s.nationality && <span className="pill">{s.nationality}</span>}</span>
+      <span className="driver-sub"><Flag code={s.nationality} withName /></span>
       <span className="h2h-ranks"><Rank title={s.driverRankTitle} tier={s.driverRankTier} /> · <Rank title={s.safetyRankTitle} tier={s.safetyRankTier} /></span>
       <span className="rel">{s.races} corridas · {s.wins} vitórias · {s.podiums} pódios</span>
     </div>

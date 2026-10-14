@@ -1,14 +1,14 @@
 using LmuTracker.Application.Lmu;
 using LmuTracker.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 
 namespace LmuTracker.Infrastructure.Services;
 
 /// <summary>
 /// Rankings de pilotos (Driver Rank, Safety Rank, vitórias, em alta, mais limpos, mais ativos) e de carros.
-/// Uma consulta agrupada por piloto por recorte (classe + período), em cache curto; cada aba é só uma ordenação
-/// diferente dessa lista — o que também permite devolver a posição de quem está logado fora do topo.
+/// Uma consulta agrupada por piloto por recorte (classe + período), no <see cref="SnapshotCache"/>; cada aba é só
+/// uma ordenação diferente dessa lista — o que também permite devolver a posição de quem está logado fora do topo
+/// e paginar (skip/take) sem voltar ao banco.
 /// </summary>
 public sealed class RankingsService : IRankingsService
 {
@@ -21,14 +21,9 @@ public sealed class RankingsService : IRankingsService
     private const int MinRiserStarts = 3;
     private const int MinCarStarts = 10;
 
-    private readonly AppDbContext _db;
-    private readonly IMemoryCache _cache;
+    private readonly SnapshotCache _cache;
 
-    public RankingsService(AppDbContext db, IMemoryCache cache)
-    {
-        _db = db;
-        _cache = cache;
-    }
+    public RankingsService(SnapshotCache cache) => _cache = cache;
 
     private sealed record DriverInfo(
         Guid Id, string Name, string? Nationality, string? DrTitle, int? DrTier, int? DrProgress,
@@ -53,25 +48,20 @@ public sealed class RankingsService : IRankingsService
     };
 
     /// <summary>Retrato atual de todos os pilotos conhecidos, pelo SteamID.</summary>
-    private async Task<Dictionary<string, DriverInfo>> DriversIndexAsync(CancellationToken ct) =>
-        (await _cache.GetOrCreateAsync("rk:drivers", async e =>
-        {
-            e.AbsoluteExpirationRelativeToNow = CacheFor;
-            return await _db.Drivers.AsNoTracking()
-                .Select(d => new { d.SteamId, Info = new DriverInfo(d.Id, d.Name, d.Nationality, d.DriverRankTitle, d.DriverRankTier,
-                    d.DriverRankProgress, d.SafetyRankTitle, d.SafetyRankTier, d.SafetyRankProgress, d.LastSeenAt) })
-                .ToDictionaryAsync(x => x.SteamId, x => x.Info, ct);
-        }))!;
+    private Task<Dictionary<string, DriverInfo>> DriversIndexAsync(CancellationToken ct) =>
+        _cache.GetAsync("rk:drivers", CacheFor, (db, ct) => db.Drivers.AsNoTracking()
+            .Select(d => new { d.SteamId, Info = new DriverInfo(d.Id, d.Name, d.Nationality, d.DriverRankTitle, d.DriverRankTier,
+                d.DriverRankProgress, d.SafetyRankTitle, d.SafetyRankTier, d.SafetyRankProgress, d.LastSeenAt) })
+            .ToDictionaryAsync(x => x.SteamId, x => x.Info, ct), ct);
 
     /// <summary>Números de cada piloto no recorte (classe + período), numa consulta só.</summary>
-    private async Task<List<PeriodStats>> StatsAsync(string? carClass, string period, CancellationToken ct) =>
-        (await _cache.GetOrCreateAsync($"rk:stats:{carClass}|{period}", async e =>
+    private Task<List<PeriodStats>> StatsAsync(string? carClass, string period, CancellationToken ct) =>
+        _cache.GetAsync($"rk:stats:{carClass}|{period}", CacheFor, (db, ct) =>
         {
-            e.AbsoluteExpirationRelativeToNow = CacheFor;
-            var q = ExtrasService.OfClass(_db.RaceResults.AsNoTracking().Where(r => r.SteamId != null), carClass);
+            var q = ExtrasService.OfClass(db.RaceResults.AsNoTracking().Where(r => r.SteamId != null), carClass);
             if (From(period) is { } from)
                 q = q.Where(r => (r.RaceSplit.ScanEvent.EventStartsAt ?? r.RaceSplit.ScanEvent.RaceStartsAt) >= from);
-            return await q
+            return q
                 .GroupBy(r => r.SteamId!)
                 .Select(g => new PeriodStats(
                     g.Key, g.Max(r => r.Name)!, g.Max(r => r.Nationality),
@@ -89,7 +79,7 @@ public sealed class RankingsService : IRankingsService
                     g.Sum(r => r.FinishStatus == FinishedNormally && r.ClassGridPos != null && r.ClassPosition != null
                         ? r.ClassGridPos!.Value - r.ClassPosition!.Value : 0)))
                 .ToListAsync(ct);
-        }))!;
+        }, ct);
 
     private static int TitleIndex(string? t) => Array.FindIndex(Titles, x => x.Equals(t, StringComparison.OrdinalIgnoreCase));
 
@@ -99,14 +89,15 @@ public sealed class RankingsService : IRankingsService
             ? i * 300 + (Math.Clamp(t, 1, 3) - 1) * 100 + Math.Clamp(progress ?? 0, 0, 100)
             : -1;
 
-    public async Task<RankingDto?> DriversAsync(string kind, string? carClass, string? period, string? country, int take, Guid? me,
-        CancellationToken ct = default)
+    public async Task<RankingDto?> DriversAsync(string kind, string? carClass, string? period, string? country, int skip, int take,
+        Guid? me, CancellationToken ct = default)
     {
         country = NormCountry(country);
         kind = kind.ToLowerInvariant();
         if (kind is not ("dr" or "sr" or "wins" or "risers" or "clean" or "active" or "poles" or "gains")) return null;
         period = NormPeriod(period);
         take = Math.Clamp(take, 1, 100);
+        skip = Math.Max(skip, 0);
         if (kind is "dr" or "sr") carClass = null; // rank é do piloto, não da classe
 
         var drivers = await DriversIndexAsync(ct);
@@ -198,7 +189,7 @@ public sealed class RankingsService : IRankingsService
                 s?.Starts ?? 0, s?.Wins ?? 0, s?.Podiums ?? 0, value, extra);
         }
 
-        var rows = Enumerable.Range(0, Math.Min(take, ordered.Count)).Select(Row).ToList();
+        var rows = Enumerable.Range(skip, Math.Max(0, Math.Min(take, ordered.Count - skip))).Select(Row).ToList();
         RankingRowDto? mine = null;
         if (me is { } meId && drivers.FirstOrDefault(d => d.Value.Id == meId).Key is { } mySteam)
         {
@@ -212,10 +203,9 @@ public sealed class RankingsService : IRankingsService
     {
         period = NormPeriod(period);
         country = NormCountry(country);
-        return (await _cache.GetOrCreateAsync($"rk:cars:{carClass}|{period}|{country}", async e =>
+        return await _cache.GetAsync($"rk:cars:{carClass}|{period}|{country}", CacheFor, async (db, ct) =>
         {
-            e.AbsoluteExpirationRelativeToNow = CacheFor;
-            var q = ExtrasService.OfClass(_db.RaceResults.AsNoTracking().Where(r => r.CarType != null), carClass);
+            var q = ExtrasService.OfClass(db.RaceResults.AsNoTracking().Where(r => r.CarType != null), carClass);
             if (country is not null) q = q.Where(r => r.Nationality == country);
             if (From(period) is { } from)
                 q = q.Where(r => (r.RaceSplit.ScanEvent.EventStartsAt ?? r.RaceSplit.ScanEvent.RaceStartsAt) >= from);
@@ -238,7 +228,7 @@ public sealed class RankingsService : IRankingsService
                     Math.Round((double)c.Wins / c.Starts, 3), c.Avg is null ? null : Math.Round(c.Avg.Value, 1)))
                 .ToList();
             return new CarRankingDto(carClass, country, period, MinCarStarts, rows.Count, rows);
-        }))!;
+        }, ct);
     }
 
     public async Task<IReadOnlyList<CountryDto>> CountriesAsync(CancellationToken ct = default) =>

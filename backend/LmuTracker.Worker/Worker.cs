@@ -28,6 +28,8 @@ public class Worker : BackgroundService
         using (var scope = _sp.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            // Migrations que criam índice percorrem a tabela de resultados inteira — bem mais que os 30 s padrão.
+            db.Database.SetCommandTimeout(TimeSpan.FromMinutes(15));
             await db.Database.MigrateAsync(stoppingToken);
         }
 

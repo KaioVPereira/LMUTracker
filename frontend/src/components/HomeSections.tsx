@@ -4,6 +4,7 @@ import type { ActiveDriver, ClassShare, CloseFinish, LapRecord, RankClimber, Top
 import { classKey, classShort } from '../lib/classes'
 import { fmtInt, fmtLap, fmtRelative, rankClass } from '../lib/format'
 import { ClassChip, EmptyState, Skeleton } from './Bits'
+import { Flag } from './Flag'
 
 /** Nome do piloto com link para o perfil (quando o conhecemos pelo id interno). */
 function DriverLink({ id, name }: { id: string | null; name: string }) {
@@ -100,7 +101,7 @@ export function RecordCard({ r, now }: { r: LapRecord; now: number }) {
       </span>
       <span className="rec-driver">
         <b>{r.driverName}</b>
-        {r.nationality && <span className="pill">{r.nationality}</span>}
+        <Flag code={r.nationality} />
         <span className="rel" style={{ marginLeft: 'auto' }}>{fmtRelative(r.setAt, now)}</span>
       </span>
     </Link>
@@ -194,7 +195,7 @@ export function Highlights({ climbers, close, active, share }: {
                   <span className="hl-rank">{i + 1}</span>
                   <span className="hl-main">
                     <b><DriverLink id={a.driverId} name={a.name} /></b>
-                    {a.nationality && <span>{a.nationality}</span>}
+                    <Flag code={a.nationality} withName />
                   </span>
                   <span className="hl-val">{a.races}<small>corridas</small></span>
                 </li>

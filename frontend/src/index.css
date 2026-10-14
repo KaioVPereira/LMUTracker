@@ -877,7 +877,7 @@ tr.rk-gap td { text-align: center; color: var(--faint); padding: 2px 0; }
   /* celular: #, piloto e a métrica da aba; o resto fica no perfil do piloto */
   .rk-table th:nth-child(n+4), .rk-table td:nth-child(n+4) { display: none; }
   .rk-table-cars th:nth-child(4), .rk-table-cars td:nth-child(4) { display: table-cell; }
-  .rk-table .pill.nat { display: none; }
+  .rk-table .flag-wrap { margin-left: 6px; }
   .tbl-wrap table.rk-table { min-width: 0; width: 100%; }
   .rk-prog { display: none; }
   .rk-me-pos { font-size: 22px; }
@@ -913,3 +913,8 @@ tr.rk-gap td { text-align: center; color: var(--faint); padding: 2px 0; }
 .app-facts dd { margin: 2px 0 0; font-weight: 700; font-size: 15px; }
 .app-download { width: 100%; }
 .app-benefits .card b { display: block; margin-bottom: 4px; }
+
+/* Bandeira do país do piloto (componente Flag). */
+.flag-wrap { display: inline-flex; align-items: center; gap: 6px; vertical-align: middle; margin-left: 8px; font-size: 13px; color: var(--soft); white-space: nowrap; }
+.flag { width: 21px; height: 14px; border-radius: 2px; object-fit: cover; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14); flex: none; }
+.more-row { display: flex; justify-content: center; margin: 12px 0 4px; }

@@ -11,6 +11,7 @@ import { MAX_SERIES, SERIES } from '../lib/series'
 import { finishLabel, fmtDateTime, fmtLap, fmtRaceTime, typeLabel } from '../lib/format'
 import { useFollows } from '../lib/follows'
 import { useApi } from '../lib/useApi'
+import { Flag } from '../components/Flag'
 
 const STATUS_NOTE: Record<string, string> = {
   Pending: 'Esta corrida ainda não terminou. Os resultados aparecem aqui alguns minutos depois do fim.',
@@ -158,7 +159,7 @@ export function RacePage() {
                               {x.driverId
                                 ? <Link to={`/pilotos/${x.driverId}`} onClick={(e) => e.stopPropagation()}>{x.name}</Link>
                                 : x.name}
-                              {x.nationality && <span className="pill nat">{x.nationality}</span>}
+                              <Flag code={x.nationality} />
                             </td>
                             <td className="car">{x.vehName ?? '—'}</td>
                             <td className="num">{x.classGridPos ?? x.gridPos ?? '—'}</td>

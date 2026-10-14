@@ -5,6 +5,7 @@ import { TopBar } from '../components/TopBar'
 import { classKey } from '../lib/classes'
 import { fmtLap } from '../lib/format'
 import { useApi } from '../lib/useApi'
+import { Flag } from '../components/Flag'
 
 const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 100) : 0)
 
@@ -64,7 +65,7 @@ export function CarPage() {
                   <div key={(p.driverId ?? p.name) + i} className="stat-row">
                     <span className="hl-rank">{i + 1}</span>
                     <span className="stat-main">
-                      <b>{p.driverId ? <Link to={`/pilotos/${p.driverId}`} className="plain">{p.name}</Link> : p.name}{p.nationality && <span className="pill">{p.nationality}</span>}</b>
+                      <b>{p.driverId ? <Link to={`/pilotos/${p.driverId}`} className="plain">{p.name}</Link> : p.name}<Flag code={p.nationality} /></b>
                       <span>{p.starts} largadas</span>
                     </span>
                     <span className="stat-nums"><span><small>vitórias</small><b>{p.wins}</b></span><span><small>pódios</small><b>{p.podiums}</b></span></span>

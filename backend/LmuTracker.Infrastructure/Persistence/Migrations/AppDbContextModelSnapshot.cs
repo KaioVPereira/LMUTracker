@@ -161,7 +161,8 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
                         .HasColumnType("float");
 
                     b.Property<string>("CarClass")
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
 
                     b.Property<string>("CarNumber")
                         .HasColumnType("nvarchar(max)");
@@ -189,13 +190,15 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
                         .HasColumnType("int");
 
                     b.Property<string>("DriverRankTitle")
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
 
                     b.Property<byte[]>("ExtraData")
                         .HasColumnType("varbinary(max)");
 
                     b.Property<string>("FinishStatus")
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
 
                     b.Property<double?>("FinishTime")
                         .HasColumnType("float");
@@ -221,7 +224,8 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(96)");
 
                     b.Property<string>("Nationality")
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
 
                     b.Property<int?>("Penalties")
                         .HasColumnType("int");
@@ -260,7 +264,8 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
                         .HasColumnType("int");
 
                     b.Property<string>("SafetyRankTitle")
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
 
                     b.Property<string>("SteamId")
                         .HasMaxLength(20)
@@ -280,6 +285,8 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
                     b.HasIndex("CarType");
 
                     b.HasIndex("RaceSplitId");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("RaceSplitId"), new[] { "SteamId", "Name", "Nationality", "CarClass", "CarType", "ClassPosition", "ClassGridPos", "QualiClassPosition", "Laps", "BestLapTime", "FinishTime", "FinishStatus", "DriverRankAdjustment", "SafetyRankAdjustment", "Incidents", "Penalties", "DriverRankTitle", "DriverRankTier", "DriverRankProgress" });
 
                     b.HasIndex("SteamId");
 

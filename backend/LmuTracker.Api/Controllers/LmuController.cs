@@ -35,8 +35,9 @@ public class LmuController : ApiControllerBase
     [OutputCache(Duration = 30)]
     public async Task<ActionResult<LeaderboardDto>> Leaderboard(
         [FromQuery] string? track, [FromQuery(Name = "class")] string? carClass, [FromQuery] string? car,
-        [FromQuery] string? setup, [FromQuery] string? country, [FromQuery] int take = 50, CancellationToken ct = default)
-        => Ok(await _extras.LeaderboardAsync(track, carClass, car, setup, country, take, ct));
+        [FromQuery] string? setup, [FromQuery] string? country, [FromQuery] int skip = 0, [FromQuery] int take = 50,
+        CancellationToken ct = default)
+        => Ok(await _extras.LeaderboardAsync(track, carClass, car, setup, country, skip, take, ct));
 
     /// <summary>
     /// Rankings de pilotos: dr | sr | wins | risers | clean | active | poles | gains, por classe e período (7d|30d|all).
@@ -46,8 +47,8 @@ public class LmuController : ApiControllerBase
     [OutputCache(Duration = 30)]
     public async Task<ActionResult<RankingDto>> DriverRanking(
         string kind, [FromQuery(Name = "class")] string? carClass, [FromQuery] string? period, [FromQuery] string? country,
-        [FromQuery] Guid? me, [FromQuery] int take = 50, CancellationToken ct = default)
-        => await _rankings.DriversAsync(kind, carClass, period, country, take, me, ct) is { } r ? Ok(r) : NotFound();
+        [FromQuery] Guid? me, [FromQuery] int skip = 0, [FromQuery] int take = 50, CancellationToken ct = default)
+        => await _rankings.DriversAsync(kind, carClass, period, country, skip, take, me, ct) is { } r ? Ok(r) : NotFound();
 
     /// <summary>Ranking de carros: vitórias na classe, taxa de vitória e pódios, por classe e período.</summary>
     [HttpGet("rankings/cars")]

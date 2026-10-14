@@ -436,10 +436,10 @@ public sealed class ScannerService
                 var rowExtra = JsonBlob.Keep(r.Extra);
                 split.Results.Add(new RaceResult
                 {
-                    DriverRankTitle = meta?.DriverRank?.Rank,
+                    DriverRankTitle = Cut(meta?.DriverRank?.Rank, RaceResult.RankTitleMax),
                     DriverRankTier = meta?.DriverRank?.Tier,
                     DriverRankProgress = RoundProgress(meta?.DriverRank?.Progress),
-                    SafetyRankTitle = meta?.SafetyRank?.Rank,
+                    SafetyRankTitle = Cut(meta?.SafetyRank?.Rank, RaceResult.RankTitleMax),
                     SafetyRankTier = meta?.SafetyRank?.Tier,
                     SafetyRankProgress = RoundProgress(meta?.SafetyRank?.Progress),
                     QualiPosition = ParseInt(q?.Position),
@@ -453,12 +453,12 @@ public sealed class ScannerService
                     // Piloto fora do array drivers chega com SteamId "" — vazio vira null para não juntar todos num só.
                     SteamId = string.IsNullOrWhiteSpace(r.SteamId) ? null : r.SteamId,
                     RaceOsPlayerId = meta?.NkId ?? r.RaceControlId,
-                    Name = r.Name ?? meta?.Name ?? "—",
-                    Nationality = meta?.Nationality,
+                    Name = Cut(r.Name ?? meta?.Name, RaceResult.NameMax) ?? "—",
+                    Nationality = Cut(meta?.Nationality, RaceResult.NationalityMax),
                     Badge = meta?.Badge,
-                    CarClass = r.CarClass,
+                    CarClass = Cut(r.CarClass, RaceResult.CarClassMax),
                     CarNumber = r.CarNumber,
-                    CarType = r.CarType,
+                    CarType = Cut(r.CarType, RaceResult.CarTypeMax),
                     VehName = r.VehName,
                     TeamName = r.TeamName,
                     GridPos = ParseInt(r.GridPos),
@@ -468,7 +468,7 @@ public sealed class ScannerService
                     Laps = r.Laps,
                     BestLapTime = ParseDouble(r.BestLapTime),
                     FinishTime = ParseDouble(r.FinishTime),
-                    FinishStatus = r.FinishStatus,
+                    FinishStatus = Cut(r.FinishStatus, RaceResult.FinishStatusMax),
                     Points = r.Points,
                     DriverRankAdjustment = meta?.DriverRankAdjustment,
                     SafetyRankAdjustment = meta?.SafetyRankAdjustment,
@@ -592,6 +592,9 @@ public sealed class ScannerService
             drv.UpdatedAt = DateTime.UtcNow;
         }
     }
+
+    /// <summary>Corta no tamanho da coluna: um texto maior que o previsto não pode derrubar a gravação da corrida.</summary>
+    private static string? Cut(string? s, int max) => s is { Length: var n } && n > max ? s[..max] : s;
 
     private static int? ParseInt(string? s) =>
         int.TryParse((s ?? "").Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) ? v : null;

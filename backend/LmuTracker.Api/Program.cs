@@ -34,6 +34,7 @@ builder.Services.AddSingleton<ITicketImageStorage>(sp =>
 builder.Services.AddScoped<LmuTracker.Application.Tickets.ITicketService, LmuTracker.Infrastructure.Services.TicketService>();
 builder.Services.AddScoped<IAuthorizationHandler, SuperAdminHandler>();
 builder.Services.AddHostedService<SuperAdminSeeder>();
+builder.Services.AddHostedService<LmuTracker.Api.Background.HomeWarmer>();
 
 // ---------- JWT ----------
 // Em dev o segredo vem do appsettings.Development.json. Em produção não há segredo versionado: ele é

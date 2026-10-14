@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import type { SearchResults } from '../api/types'
 import { classKey, classShort } from '../lib/classes'
-import { fmtDateTime, fmtInt, rankClass } from '../lib/format'
+import { countryName, fmtDateTime, fmtInt, rankClass } from '../lib/format'
 import { ClassChips, Skeleton } from './Bits'
 
 type Kind = 'driver' | 'track' | 'car' | 'race' | 'page'
@@ -71,7 +71,7 @@ function toItems(r: SearchResults, query: string): Item[] {
   const all = [
     ...r.drivers.map((d): Item => ({
       id: `d:${d.driverId}`, kind: 'driver', label: d.name, href: `/pilotos/${d.driverId}`,
-      sub: [d.nationality, `${fmtInt(d.races)} corrida${d.races === 1 ? '' : 's'}`].filter(Boolean).join(' · '),
+      sub: [d.nationality && countryName(d.nationality), `${fmtInt(d.races)} corrida${d.races === 1 ? '' : 's'}`].filter(Boolean).join(' · '),
       rank: d.driverRankTitle ? `${d.driverRankTitle}${d.driverRankTier !== null ? ` ${d.driverRankTier}` : ''}` : null,
     })),
     ...r.tracks.map((t): Item => ({

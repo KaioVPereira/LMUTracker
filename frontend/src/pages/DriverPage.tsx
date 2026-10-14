@@ -8,8 +8,9 @@ import { ActivityHeatmap, RankChart } from '../components/ProfileCharts'
 import { FollowButton } from '../components/FollowButton'
 import { UnlinkSteamButton } from '../components/SteamLink'
 import { TopBar } from '../components/TopBar'
-import { badgeLabel, finishLabel, fmtDateTime, fmtDay, fmtInt, fmtLap, fmtRelative, rankClass } from '../lib/format'
+import { badgeLabel, countryName, finishLabel, fmtDateTime, fmtDay, fmtInt, fmtLap, fmtRelative, rankClass } from '../lib/format'
 import { useApi } from '../lib/useApi'
+import { Flag } from '../components/Flag'
 
 const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 100) : 0)
 const fmt1 = (v: number | null | undefined) => (v === null || v === undefined ? '—' : v.toLocaleString('pt-BR', { maximumFractionDigits: 1 }))
@@ -41,7 +42,7 @@ export function DriverPage() {
             <h1>{d.name}</h1>
             <span className="driver-sub">
               {d.isMe && <span className="pill me">Você</span>}
-              {d.nationality && <span className="pill">{d.nationality}</span>}
+              <Flag code={d.nationality} withName />
               {badge && <span className="pill">{badge}</span>}
               <span>visto {fmtRelative(d.lastSeenAt)}</span>
             </span>
@@ -246,7 +247,7 @@ function RivalsSection({ rivals, meId }: { rivals: Rival[]; meId: string }) {
           {rivals.map((r) => (
             <div key={(r.driverId ?? r.name) + r.sharedRaces} className="stat-row">
               <span className="stat-main">
-                <b>{r.driverId ? <Link to={`/pilotos/${r.driverId}`} className="plain">{r.name}</Link> : r.name}{r.nationality && <span className="pill">{r.nationality}</span>}</b>
+                <b>{r.driverId ? <Link to={`/pilotos/${r.driverId}`} className="plain">{r.name}</Link> : r.name}<Flag code={r.nationality} /></b>
                 <span>{r.sharedRaces} corridas juntos · última {fmtRelative(r.lastRaced)}</span>
               </span>
               <span className="h2h-mini" aria-label={`${r.aheadOfThem} vezes na frente, ${r.behindThem} atrás`}>
@@ -274,7 +275,7 @@ function ComparePicker({ meId }: { meId: string }) {
     let alive = true
     const id = window.setTimeout(() => {
       api<SearchResults>(`/lmu/search?q=${encodeURIComponent(term)}`)
-        .then((r) => { if (alive) setList(r.drivers.filter((x) => x.driverId !== meId).map((x) => ({ id: x.driverId, name: x.name, sub: `${x.nationality ?? ''} · ${x.races} corridas` }))) })
+        .then((r) => { if (alive) setList(r.drivers.filter((x) => x.driverId !== meId).map((x) => ({ id: x.driverId, name: x.name, sub: `${x.nationality ? `${countryName(x.nationality)} · ` : ''}${x.races} corridas` }))) })
         .catch(() => { if (alive) setList([]) })
     }, 180)
     return () => { alive = false; window.clearTimeout(id) }

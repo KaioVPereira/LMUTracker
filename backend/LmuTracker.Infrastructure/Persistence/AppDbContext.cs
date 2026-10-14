@@ -65,9 +65,23 @@ public class AppDbContext : DbContext
         {
             e.HasIndex(x => x.SteamId);
             e.HasIndex(x => x.CarType);         // página de carro, filtro de carro
+            // Índice de cobertura das agregações (início, rankings, pistas): a linha da tabela carrega o volta a volta
+            // e o JSON cru comprimidos (~2,7 KB); este índice tem só as colunas que as estatísticas leem, então varrer
+            // a semana/o mês lê bem menos páginas e cabe na memória do SQL Express. Também é o índice da FK.
+            e.HasIndex(x => x.RaceSplitId).IncludeProperties(x => new
+            {
+                x.SteamId, x.Name, x.Nationality, x.CarClass, x.CarType, x.ClassPosition, x.ClassGridPos, x.QualiClassPosition,
+                x.Laps, x.BestLapTime, x.FinishTime, x.FinishStatus, x.DriverRankAdjustment, x.SafetyRankAdjustment,
+                x.Incidents, x.Penalties, x.DriverRankTitle, x.DriverRankTier, x.DriverRankProgress,
+            });
             e.Property(x => x.SteamId).HasMaxLength(20);
-            e.Property(x => x.Name).HasMaxLength(96);
-            e.Property(x => x.CarType).HasMaxLength(96);
+            e.Property(x => x.Name).HasMaxLength(RaceResult.NameMax);
+            e.Property(x => x.CarType).HasMaxLength(RaceResult.CarTypeMax);
+            e.Property(x => x.Nationality).HasMaxLength(RaceResult.NationalityMax);
+            e.Property(x => x.CarClass).HasMaxLength(RaceResult.CarClassMax);
+            e.Property(x => x.FinishStatus).HasMaxLength(RaceResult.FinishStatusMax);
+            e.Property(x => x.DriverRankTitle).HasMaxLength(RaceResult.RankTitleMax);
+            e.Property(x => x.SafetyRankTitle).HasMaxLength(RaceResult.RankTitleMax);
         });
 
         b.Entity<Follow>(e =>

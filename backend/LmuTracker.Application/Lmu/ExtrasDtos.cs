@@ -43,8 +43,9 @@ public interface IExtrasService
 {
     /// <summary><paramref name="setup"/>: "fixed", "open" ou null (todos). Classe: hyper|lmp2|lmp3|gt3.</summary>
     /// <paramref name="country"/>: nacionalidade do piloto (código de 2 letras, ex.: "BR"); null = todos.
-    Task<LeaderboardDto> LeaderboardAsync(string? track, string? carClass, string? car, string? setup, string? country, int take,
-        CancellationToken ct = default);
+    /// <paramref name="skip"/>/<paramref name="take"/>: paginação (as posições continuam contando do 1º do recorte).
+    Task<LeaderboardDto> LeaderboardAsync(string? track, string? carClass, string? car, string? setup, string? country, int skip,
+        int take, CancellationToken ct = default);
     Task<TrackDetailDto?> TrackAsync(string track, CancellationToken ct = default);
     Task<CarDetailDto?> CarAsync(string car, CancellationToken ct = default);
     Task<IReadOnlyList<CarListItemDto>> CarsAsync(CancellationToken ct = default);

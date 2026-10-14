@@ -9,6 +9,15 @@ namespace LmuTracker.Domain.Entities;
 /// </summary>
 public class RaceResult : Entity
 {
+    // Tamanhos das colunas de texto que as agregações leem. nvarchar(max) faz o SQL Server tratar MAX/GROUP BY como
+    // LOB (MAX(Nationality) sozinho levava ~5 s em 270 mil linhas); o scanner corta o que passar disso.
+    public const int NameMax = 96;
+    public const int CarTypeMax = 96;
+    public const int NationalityMax = 16;
+    public const int CarClassMax = 32;
+    public const int FinishStatusMax = 32;
+    public const int RankTitleMax = 32;
+
     public Guid RaceSplitId { get; set; }
     public RaceSplit RaceSplit { get; set; } = null!;
 

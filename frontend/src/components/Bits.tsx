@@ -119,3 +119,14 @@ export function TrackArt({ className }: { className?: string }) {
     </svg>
   )
 }
+
+/** Botão "Mostrar mais" das tabelas paginadas. */
+export function MoreButton({ shown, total, loading, onClick }: { shown: number; total: number; loading: boolean; onClick: () => void }) {
+  return (
+    <div className="more-row">
+      <button type="button" className="btn btn-ghost btn-sm" onClick={onClick} disabled={loading}>
+        {loading ? 'Carregando…' : `Mostrar mais (${shown.toLocaleString('pt-BR')} de ${total.toLocaleString('pt-BR')})`}
+      </button>
+    </div>
+  )
+}
