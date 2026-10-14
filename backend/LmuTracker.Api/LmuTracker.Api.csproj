@@ -12,6 +12,8 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="SkiaSharp" Version="4.152.3" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.152.3" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -19,5 +21,10 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Fonte dos cards Open Graph (Saira Condensed, SIL Open Font License — ver Og/Fonts/OFL.txt). -->
+    <EmbeddedResource Include="Og/Fonts/*.ttf" />
+  </ItemGroup>
 
 </Project>

@@ -1,6 +1,7 @@
 using System.Text;
 using System.Threading.RateLimiting;
 using LmuTracker.Api.Middleware;
+using LmuTracker.Api.Og;
 using LmuTracker.Infrastructure;
 using LmuTracker.Infrastructure.Auth;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -13,6 +14,8 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddControllers();
 // Cache de saída das leituras públicas (só requisições sem Authorization — a política padrão não guarda as logadas).
 builder.Services.AddOutputCache();
+builder.Services.AddScoped<OgCards>();
+builder.Services.AddScoped<SpaMeta>();
 
 // ---------- JWT ----------
 // Em dev o segredo vem do appsettings.Development.json. Em produção não há segredo versionado: ele é
@@ -113,17 +116,19 @@ app.MapControllers();
 
 if (serveSpa)
 {
-    // Qualquer rota que não seja da Api nem um arquivo é rota do React: devolve o index.html.
-    app.MapFallback(async ctx =>
+    // Qualquer rota que não seja da Api nem um arquivo é rota do React: devolve o index.html, com as meta tags
+    // Open Graph daquela página (para o link virar card no Discord/WhatsApp, que não rodam o JavaScript).
+    var indexHtml = await File.ReadAllTextAsync(spaIndex);
+    app.MapFallback(async (HttpContext ctx, SpaMeta meta) =>
     {
-        if (ctx.Request.Path.StartsWithSegments("/api"))
+        if (ctx.Request.Path.StartsWithSegments("/api") || ctx.Request.Path.StartsWithSegments("/og"))
         {
             ctx.Response.StatusCode = StatusCodes.Status404NotFound;
             return;
         }
         ctx.Response.ContentType = "text/html; charset=utf-8";
         ctx.Response.Headers.CacheControl = "no-cache";
-        await ctx.Response.SendFileAsync(spaIndex);
+        await ctx.Response.WriteAsync(await meta.RenderAsync(indexHtml, ctx.Request.Path.Value ?? "/", ctx.RequestAborted));
     });
 }
 

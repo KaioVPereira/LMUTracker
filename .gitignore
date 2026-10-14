@@ -44,3 +44,6 @@ Thumbs.db
 
 # Cópias locais do banco de produção (dados pessoais) — nunca versionar
 .local-db/
+
+# Build do front copiado só para testar a Api servindo o site localmente (na imagem ele vem do Dockerfile.site)
+backend/LmuTracker.Api/wwwroot/
