@@ -27,6 +27,11 @@ public sealed class ExceptionMiddleware
             ctx.Response.ContentType = "application/json";
             await ctx.Response.WriteAsync(JsonSerializer.Serialize(new { message = ex.Message }));
         }
+        catch (Exception) when (ctx.RequestAborted.IsCancellationRequested)
+        {
+            // O cliente desistiu (fechou a aba, trocou de página): não é erro do servidor e não há a quem responder.
+            ctx.Response.StatusCode = 499;
+        }
         catch (Exception ex)
         {
             _log.LogError(ex, "Erro não tratado.");

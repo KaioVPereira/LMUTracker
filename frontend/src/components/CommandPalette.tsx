@@ -45,6 +45,7 @@ function saveRecent(list: Item[]) {
 const SHORTCUTS: Item[] = [
   { id: 'p:inicio', kind: 'page', label: 'Início', sub: 'Corrida ao vivo e agenda', href: '/' },
   { id: 'p:corridas', kind: 'page', label: 'Corridas', sub: 'Todos os resultados guardados', href: '/corridas' },
+  { id: 'p:rankings', kind: 'page', label: 'Rankings', sub: 'Voltas mais rápidas por pista e classe', href: '/rankings' },
   { id: 'p:perfil', kind: 'page', label: 'Meu perfil', sub: 'Suas corridas e seu rank', href: '/perfil' },
 ]
 
@@ -74,11 +75,11 @@ function toItems(r: SearchResults, query: string): Item[] {
       rank: d.driverRankTitle ? `${d.driverRankTitle}${d.driverRankTier !== null ? ` ${d.driverRankTier}` : ''}` : null,
     })),
     ...r.tracks.map((t): Item => ({
-      id: `t:${t.track}`, kind: 'track', label: t.track, href: `/corridas?pista=${encodeURIComponent(t.track)}`,
+      id: `t:${t.track}`, kind: 'track', label: t.track, href: `/pistas/${encodeURIComponent(t.track)}`,
       sub: `${fmtInt(t.races)} corrida${t.races === 1 ? '' : 's'} com resultado`,
     })),
     ...r.cars.map((c): Item => ({
-      id: `c:${c.car}:${c.carClass ?? ''}`, kind: 'car', label: c.car, href: `/corridas?carro=${encodeURIComponent(c.car)}`,
+      id: `c:${c.car}:${c.carClass ?? ''}`, kind: 'car', label: c.car, href: `/carros/${encodeURIComponent(c.car)}`,
       sub: `${fmtInt(c.starts)} largada${c.starts === 1 ? '' : 's'}`, cls: c.carClass,
     })),
     ...r.races.map((e): Item => ({

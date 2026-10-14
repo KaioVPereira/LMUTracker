@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, NavLink } from 'react-router-dom'
+import { Link, NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { AccountMenu } from './AccountMenu'
 import { CommandPalette } from './CommandPalette'
@@ -16,6 +16,7 @@ export function Logo() {
 const ICONS = {
   home: <path d="M3 11 12 4l9 7v9H3z" />,
   flag: <path d="M5 21V4h11l-2 4 2 4H5" />,
+  trophy: <path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3" />,
   user: <><circle cx="12" cy="8" r="4" /><path d="M4 21c1-4 4-6 8-6s7 2 8 6" /></>,
   search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></>,
 }
@@ -47,6 +48,7 @@ function Icon({ name }: { name: keyof typeof ICONS }) {
 /** Barra de cima (desktop e celular) + barra de abas embaixo no celular. */
 export function TopBar() {
   const { user } = useAuth()
+  const location = useLocation()
   const [searchOpen, setSearchOpen] = useState(false)
   const [openSearch] = useState(() => () => setSearchOpen(true))
   useSearchShortcut(openSearch)
@@ -56,35 +58,31 @@ export function TopBar() {
       <header className="bar">
         <div className="bar-in">
           <Logo />
-          {user && (
-            <nav className="nav" aria-label="Principal">
-              <NavLink to="/" end>Início</NavLink>
-              <NavLink to="/corridas">Corridas</NavLink>
-            </nav>
-          )}
-          {user && (
+          <nav className="nav" aria-label="Principal">
+            <NavLink to="/" end>Início</NavLink>
+            <NavLink to="/corridas">Corridas</NavLink>
+            <NavLink to="/rankings">Rankings</NavLink>
+          </nav>
+          {(
             <button type="button" className="search-btn" onClick={openSearch} aria-label="Buscar (Ctrl+K)">
               <Icon name="search" />
               <span className="search-btn-text">Pilotos, pistas, carros, corridas…</span>
               <kbd>{isMac ? '⌘K' : 'Ctrl K'}</kbd>
             </button>
           )}
-          {user && (
-            <div className="bar-right">
-              <AccountMenu />
-            </div>
-          )}
+          <div className="bar-right">
+            {user ? <AccountMenu /> : <Link to="/login" state={{ from: location.pathname + location.search }} className="btn btn-sm btn-primary">Entrar</Link>}
+          </div>
         </div>
       </header>
-      {user && (
-        <nav className="tabbar" aria-label="Navegação">
-          <NavLink to="/" end><Icon name="home" />Início</NavLink>
-          <NavLink to="/corridas"><Icon name="flag" />Corridas</NavLink>
-          <button type="button" onClick={openSearch}><Icon name="search" />Busca</button>
-          <NavLink to="/perfil"><Icon name="user" />Perfil</NavLink>
-        </nav>
-      )}
-      {user && searchOpen && <CommandPalette onClose={() => setSearchOpen(false)} />}
+      <nav className="tabbar" aria-label="Navegação">
+        <NavLink to="/" end><Icon name="home" />Início</NavLink>
+        <NavLink to="/corridas"><Icon name="flag" />Corridas</NavLink>
+        <button type="button" onClick={openSearch}><Icon name="search" />Busca</button>
+        <NavLink to="/rankings"><Icon name="trophy" />Rankings</NavLink>
+        <NavLink to="/perfil"><Icon name="user" />{user ? 'Perfil' : 'Entrar'}</NavLink>
+      </nav>
+      {searchOpen && <CommandPalette onClose={() => setSearchOpen(false)} />}
     </>
   )
 }

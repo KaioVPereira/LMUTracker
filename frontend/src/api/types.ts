@@ -277,6 +277,7 @@ export interface DriverProfile {
   isMe: boolean
   stats: DriverStats
   races: Paged<DriverRace>
+  isFollowed: boolean
 }
 
 // ---------- busca global ----------
@@ -561,3 +562,89 @@ export interface SplitEvent {
 }
 
 export interface SplitEvents { eventId: string; splitNo: number; available: boolean; events: SplitEvent[] }
+
+// ---------- rankings, pista, carro, seguindo ----------
+
+export interface LeaderboardRow {
+  rank: number
+  driverId: string | null
+  name: string
+  nationality: string | null
+  car: string | null
+  carClass: string | null
+  bestLap: number
+  gapToFirst: number | null
+  eventId: string
+  setAt: string
+  splitNo: number
+}
+
+export interface Leaderboard { track: string | null; carClass: string | null; car: string | null; setup: string; drivers: number; rows: LeaderboardRow[] }
+
+export interface TrackRecord {
+  carClass: string | null
+  fixedSetup: boolean
+  bestLap: number
+  driverId: string | null
+  driverName: string
+  car: string | null
+  setAt: string
+  eventId: string
+}
+
+export interface CarPace { car: string; carClass: string | null; starts: number; bestLap: number | null; top10Avg: number | null }
+
+export interface TrackDetail {
+  track: string
+  races: number
+  starts: number
+  drivers: number
+  firstRace: string | null
+  lastRace: string | null
+  records: TrackRecord[]
+  cars: CarPace[]
+  classes: ClassShare[]
+}
+
+export interface CarTrack { track: string; starts: number; wins: number; bestLap: number | null; bestDriverId: string | null; bestDriverName: string | null }
+export interface CarDriver { driverId: string | null; name: string; nationality: string | null; starts: number; wins: number; podiums: number }
+
+export interface CarDetail {
+  car: string
+  carClass: string | null
+  starts: number
+  drivers: number
+  wins: number
+  podiums: number
+  dnfs: number
+  avgClassFinish: number | null
+  tracks: CarTrack[]
+  topDrivers: CarDriver[]
+}
+
+export interface CarListItem { car: string; carClass: string | null; starts: number }
+
+export interface LastRace {
+  resultId: string
+  eventId: string
+  title: string | null
+  track: string | null
+  startsAt: string
+  splitNo: number
+  carClass: string | null
+  classPosition: number | null
+  finishStatus: string | null
+}
+
+export interface FollowedDriver {
+  driverId: string
+  name: string
+  nationality: string | null
+  driverRankTitle: string | null
+  driverRankTier: number | null
+  safetyRankTitle: string | null
+  safetyRankTier: number | null
+  followedAt: string
+  racesLast7Days: number
+  lastRace: LastRace | null
+}

@@ -313,13 +313,15 @@ public sealed class LmuQueryService : ILmuQueryService
             .ToListAsync(ct);
 
         var mySteam = await _db.Users.Where(u => u.Id == currentUserId).Select(u => u.SteamId).FirstOrDefaultAsync(ct);
+        var followed = currentUserId != Guid.Empty
+                       && await _db.Follows.AnyAsync(f => f.UserId == currentUserId && f.DriverId == d.Id, ct);
 
         return new DriverProfileDto(
             d.Id, d.Name, d.Nationality, d.Badge,
             d.DriverRankTitle, d.DriverRankTier, d.DriverRankProgress,
             d.SafetyRankTitle, d.SafetyRankTier, d.SafetyRankProgress,
             d.LastSeenAt, mySteam is not null && mySteam == d.SteamId, stats,
-            new PagedDto<DriverRaceDto>(races, page, DriverRacesPageSize, total));
+            new PagedDto<DriverRaceDto>(races, page, DriverRacesPageSize, total), followed);
     }
 
     /// <summary>Linha de classificação com o id interno do piloto (nunca o SteamID).</summary>

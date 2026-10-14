@@ -11,6 +11,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddControllers();
+// Cache de saída das leituras públicas (só requisições sem Authorization — a política padrão não guarda as logadas).
+builder.Services.AddOutputCache();
 
 // ---------- JWT ----------
 // Em dev o segredo vem do appsettings.Development.json. Em produção não há segredo versionado: ele é
@@ -106,6 +108,7 @@ app.UseCors("spa");
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseOutputCache();
 app.MapControllers();
 
 if (serveSpa)

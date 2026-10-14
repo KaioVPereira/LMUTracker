@@ -5,6 +5,7 @@ import type { Achievement, CarStat, DriverProfile, DriverProfileStats, Rival, Se
 import { ClassBarCell, ClassChip, Delta, EmptyState, ErrorBox, Loading, Progress, Rank, Skeleton, TierChip } from '../components/Bits'
 import { Pager } from '../components/Pager'
 import { ActivityHeatmap, RankChart } from '../components/ProfileCharts'
+import { FollowButton } from '../components/FollowButton'
 import { UnlinkSteamButton } from '../components/SteamLink'
 import { TopBar } from '../components/TopBar'
 import { badgeLabel, finishLabel, fmtDateTime, fmtDay, fmtInt, fmtLap, fmtRelative, rankClass } from '../lib/format'
@@ -44,7 +45,10 @@ export function DriverPage() {
               {badge && <span className="pill">{badge}</span>}
               <span>visto {fmtRelative(d.lastSeenAt)}</span>
             </span>
-            {d.isMe && <span><UnlinkSteamButton onDone={() => navigate('/perfil')} /></span>}
+            <span className="chips">
+              {!d.isMe && <FollowButton driverId={d.driverId} />}
+              {d.isMe && <UnlinkSteamButton onDone={() => navigate('/perfil')} />}
+            </span>
           </div>
           <RankCard label="Driver Rank" title={d.driverRankTitle} tier={d.driverRankTier} progress={d.driverRankProgress} />
           <RankCard label="Safety Rank" title={d.safetyRankTitle} tier={d.safetyRankTier} progress={d.safetyRankProgress} />

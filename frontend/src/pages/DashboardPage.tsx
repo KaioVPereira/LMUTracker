@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { api, ApiError } from '../api/client'
-import type { EventInfo, Home, Overview, UpcomingRace } from '../api/types'
+import type { EventInfo, FollowedDriver, Home, Overview, UpcomingRace } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
 import { ClassChips, CountUp, EmptyState, ErrorBox, RowsSkeleton, Skeleton, TierChip } from '../components/Bits'
 import { Carousel, Highlights, HomeEmpty, RecordCard, WinnerCard } from '../components/HomeSections'
@@ -41,6 +41,7 @@ export function DashboardPage() {
   const [overviewError, setOverviewError] = useState<string | null>(null)
   const [home, setHome] = useState<Home | null>(null)
   const [homeError, setHomeError] = useState(false)
+  const [follows, setFollows] = useState<FollowedDriver[] | null>(null)
   const now = useNow()
 
   // Limpa o state da navegação para o aviso não voltar ao recarregar.
@@ -64,13 +65,23 @@ export function DashboardPage() {
     return () => window.clearInterval(id)
   }, [loadOverview])
 
+  // Pilotos seguidos (só logado): recarrega junto com a agenda.
+  const uid = user?.id
+  const loadFollows = useCallback(() => {
+    if (!uid) return
+    api<FollowedDriver[]>('/lmu/follows').then(setFollows).catch(() => setFollows(null))
+  }, [uid])
+  useEffect(() => {
+    loadFollows()
+    const id = window.setInterval(loadFollows, REFRESH_MS * 2)
+    return () => window.clearInterval(id)
+  }, [loadFollows])
+
   useEffect(() => {
     loadHome()
     const id = window.setInterval(loadHome, HOME_REFRESH_MS)
     return () => window.clearInterval(id)
   }, [loadHome])
-
-  if (!user) return null
 
   const upcoming = overview?.upcoming ?? []
   const live = upcoming.filter((r) => isLive(r, now))
@@ -105,6 +116,8 @@ export function DashboardPage() {
             {otherLive.map((r) => <LiveCard key={r.eventId} race={r} now={now} />)}
           </Carousel>
         )}
+
+        {user && follows && follows.length > 0 && <FollowingSection list={follows} now={now} />}
 
         {homeError && <ErrorBox message="Não deu para carregar os destaques agora." onRetry={loadHome} />}
 
@@ -198,6 +211,40 @@ export function DashboardPage() {
         </div>
       </div>
     </>
+  )
+}
+
+/**
+ * Pilotos seguidos, com a corrida mais recente de cada um. "Acabou de correr" = resultado de até 3 h atrás — o RaceOS
+ * não diz quem está inscrito antes, então o destaque chega uns 10 min depois da bandeira.
+ */
+function FollowingSection({ list, now }: { list: FollowedDriver[]; now: number }) {
+  const RECENT = 3 * 3600_000
+  return (
+    <section aria-labelledby="sec-seg">
+      <div className="sec-h"><h2 id="sec-seg">Seguindo</h2><span className="rel">{list.length} piloto{list.length === 1 ? '' : 's'}</span></div>
+      <div className="grid-cards">
+        {list.slice(0, 8).map((f) => {
+          const l = f.lastRace
+          const fresh = l && now - parseUtc(l.startsAt).getTime() < RECENT
+          return (
+            <Link key={f.driverId} to={l ? `/resultados/${l.resultId}` : `/pilotos/${f.driverId}`} className={`race-card lift follow-card${fresh ? ' is-fresh' : ''}`}>
+              <span className="top">
+                <b className="follow-name">{f.name}</b>
+                {fresh ? <span className="live-soft">acabou de correr</span> : <span className="rel">{l ? fmtRelative(l.startsAt, now) : 'sem corridas'}</span>}
+              </span>
+              {l ? (
+                <>
+                  <span className="follow-pos">{l.finishStatus === 'Finished Normally' && l.classPosition ? `P${l.classPosition}` : (l.finishStatus === 'DNF' ? 'Abandonou' : '—')}<ClassChips classes={l.carClass} /></span>
+                  <span className="meta">{l.title ?? 'Corrida'} · {l.track ?? '—'} · split {l.splitNo}</span>
+                </>
+              ) : <span className="meta">Ainda sem corrida registrada.</span>}
+              <span className="foot-nums"><span><b>{f.racesLast7Days}</b> corridas na semana</span></span>
+            </Link>
+          )
+        })}
+      </div>
+    </section>
   )
 }
 

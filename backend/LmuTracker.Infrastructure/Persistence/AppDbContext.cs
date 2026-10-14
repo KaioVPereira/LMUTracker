@@ -12,6 +12,7 @@ public class AppDbContext : DbContext
     public DbSet<RaceSplit> RaceSplits => Set<RaceSplit>();
     public DbSet<RaceResult> RaceResults => Set<RaceResult>();
     public DbSet<Driver> Drivers => Set<Driver>();
+    public DbSet<Follow> Follows => Set<Follow>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder b)
     {
@@ -37,6 +38,9 @@ public class AppDbContext : DbContext
             e.HasIndex(x => x.EventId).IsUnique();
             e.HasIndex(x => x.Status);
             e.HasIndex(x => x.RaceEndsAt);
+            e.HasIndex(x => x.Track);           // página de pista, filtro de pista, rankings
+            e.HasIndex(x => x.EventStartsAt);   // listas por data
+            e.Property(x => x.Track).HasMaxLength(96);
             e.Property(x => x.EventId).HasMaxLength(64);
             e.Property(x => x.SeriesId).HasMaxLength(64);
             e.Property(x => x.EventType).HasMaxLength(32);
@@ -56,8 +60,15 @@ public class AppDbContext : DbContext
         b.Entity<RaceResult>(e =>
         {
             e.HasIndex(x => x.SteamId);
+            e.HasIndex(x => x.CarType);         // página de carro, filtro de carro
             e.Property(x => x.SteamId).HasMaxLength(20);
             e.Property(x => x.Name).HasMaxLength(96);
+            e.Property(x => x.CarType).HasMaxLength(96);
+        });
+
+        b.Entity<Follow>(e =>
+        {
+            e.HasIndex(x => new { x.UserId, x.DriverId }).IsUnique();
         });
 
         b.Entity<Driver>(e =>

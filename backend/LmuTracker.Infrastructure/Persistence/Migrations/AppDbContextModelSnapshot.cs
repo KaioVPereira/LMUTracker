@@ -82,6 +82,32 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
                     b.ToTable("Drivers");
                 });
 
+            modelBuilder.Entity("LmuTracker.Domain.Entities.Follow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("DriverId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "DriverId")
+                        .IsUnique();
+
+                    b.ToTable("Follows");
+                });
+
             modelBuilder.Entity("LmuTracker.Domain.Entities.RaceResult", b =>
                 {
                     b.Property<Guid>("Id")
@@ -101,7 +127,8 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("CarType")
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(96)
+                        .HasColumnType("nvarchar(96)");
 
                     b.Property<int?>("ClassGridPos")
                         .HasColumnType("int");
@@ -209,6 +236,8 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CarType");
 
                     b.HasIndex("RaceSplitId");
 
@@ -324,7 +353,8 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
                         .HasColumnType("int");
 
                     b.Property<string>("Track")
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(96)
+                        .HasColumnType("nvarchar(96)");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2");
@@ -334,9 +364,13 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
                     b.HasIndex("EventId")
                         .IsUnique();
 
+                    b.HasIndex("EventStartsAt");
+
                     b.HasIndex("RaceEndsAt");
 
                     b.HasIndex("Status");
+
+                    b.HasIndex("Track");
 
                     b.ToTable("ScanEvents");
                 });

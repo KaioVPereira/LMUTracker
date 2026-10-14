@@ -540,6 +540,23 @@ td.h2h-win { background: rgba(53, 208, 127, 0.1); }
 .ev-served { color: var(--soft); background: rgba(255, 255, 255, 0.08); }
 .ev-steward { color: #bcdcff; background: rgba(78, 161, 255, 0.15); }
 
+/* ---------- rankings, seguindo ---------- */
+tr.is-followed td { background: rgba(200, 240, 49, 0.07); }
+tr.is-followed td:nth-child(4), tr.is-followed td:nth-child(3) { font-weight: 600; }
+.lb-top { color: var(--bg0) !important; }
+.lb-top::before { content: ''; }
+td.lb-1 { background: rgba(255, 207, 90, 0.18) !important; color: var(--gold) !important; }
+td.lb-2 { background: rgba(199, 204, 212, 0.14) !important; color: var(--silver) !important; }
+td.lb-3 { background: rgba(205, 127, 78, 0.16) !important; color: var(--bronze) !important; }
+.car-head { background: linear-gradient(110deg, color-mix(in srgb, var(--cc, var(--accent)) 18%, transparent), transparent 55%), var(--s1-solid) !important; }
+.follow-card .top { align-items: baseline; }
+.follow-name { font-family: var(--d); font-size: 20px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.follow-pos { display: flex; align-items: center; gap: 8px; font-family: var(--d); font-size: 28px; font-weight: 700; line-height: 1; }
+.follow-card.is-fresh { border-color: rgba(200, 240, 49, 0.4); }
+.live-soft { font-size: 11px; font-weight: 600; color: var(--accent-ink); background: var(--accent); padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+a.stat-row { color: var(--fg); text-decoration: none; transition: background-color 0.15s; }
+a.stat-row:hover { background: rgba(255, 255, 255, 0.05); }
+
 /* ---------- tabelas ---------- */
 .tbl-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--s1); }
 table { border-collapse: collapse; width: 100%; font-size: 13.5px; min-width: 560px; }
@@ -728,7 +745,7 @@ td.car { color: var(--muted); max-width: 240px; overflow: hidden; text-overflow:
   .sec-h h2 { font-size: 23px; }
   /* Barra inferior fixa, em pílula, com alvos de 44px. */
   .tabbar {
-    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+    display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
     position: fixed; left: 12px; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); z-index: 30;
     border-radius: 999px; border: 1px solid var(--line-2); background: rgba(13, 26, 56, 0.92); backdrop-filter: blur(12px);
     box-shadow: var(--e2);

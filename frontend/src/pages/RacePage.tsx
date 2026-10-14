@@ -9,6 +9,7 @@ import { classKey, classShort } from '../lib/classes'
 import { fmtGameTime, skyLabel } from '../lib/eventPhase'
 import { MAX_SERIES, SERIES } from '../lib/series'
 import { finishLabel, fmtDateTime, fmtLap, fmtRaceTime, typeLabel } from '../lib/format'
+import { useFollows } from '../lib/follows'
 import { useApi } from '../lib/useApi'
 
 const STATUS_NOTE: Record<string, string> = {
@@ -42,6 +43,7 @@ export function RacePage() {
   const laps = useApi<SplitLaps>(splits.length && tab !== 'resultado' && tab !== 'penalidades' ? `${base}/laps` : null)
   const events = useApi<SplitEvents>(splits.length && tab === 'penalidades' ? `${base}/events` : null)
   const [picked, setPicked] = useState<{ key: string; ids: string[] } | null>(null)
+  const { isFollowing } = useFollows()
 
   const set = (next: Record<string, string | null>) => {
     const p = new URLSearchParams(params)
@@ -84,7 +86,8 @@ export function RacePage() {
             <span className="eyebrow">{typeLabel(r.eventType)}</span>
             <h1>{r.title ?? 'Corrida'}</h1>
             <div className="meta-line">
-              <span>{r.track ?? '—'}</span><TierChip tier={r.tier} /><ClassChips classes={r.classes} solid />
+              {r.track ? <Link to={`/pistas/${encodeURIComponent(r.track)}`} className="plain">{r.track}</Link> : <span>—</span>}
+              <TierChip tier={r.tier} /><ClassChips classes={r.classes} solid />
               <span className="mono">{fmtDateTime(r.startsAt)}</span>
             </div>
             <div className="race-head-nums">
@@ -147,7 +150,7 @@ export function RacePage() {
                       {shownRows.length ? shownRows.map((x) => {
                         const gained = x.finishStatus === 'Finished Normally' && x.classGridPos && x.classPosition ? x.classGridPos - x.classPosition : null
                         return (
-                          <tr key={x.resultId} className="row-link" onClick={() => navigate(`/resultados/${x.resultId}`)}>
+                          <tr key={x.resultId} className={`row-link${isFollowing(x.driverId) ? ' is-followed' : ''}`} onClick={() => navigate(`/resultados/${x.resultId}`)}>
                             <ClassBarCell cls={x.carClass} />
                             <td className="num pos-cell">{x.position ?? '—'}</td>
                             <td className="num"><span className="mono">{x.classPosition ? `P${x.classPosition}` : '—'}</span> <ClassChip cls={x.carClass} /></td>
