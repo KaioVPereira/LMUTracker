@@ -8,6 +8,8 @@ export interface UserDto {
   steamId: string | null
   linkedAt: string | null
   createdAt: string
+  /** Dono da plataforma: vê e responde todos os chamados. */
+  isSuperAdmin: boolean
 }
 
 export interface AuthResponse {
@@ -647,4 +649,43 @@ export interface FollowedDriver {
   followedAt: string
   racesLast7Days: number
   lastRace: LastRace | null
+}
+
+// ---------- Chamados (bugs e sugestões) ----------
+export type TicketType = 'Bug' | 'Idea'
+export type TicketStatus = 'Open' | 'InReview' | 'InDevelopment' | 'Completed' | 'Cancelled'
+
+export interface TicketPerson {
+  username: string
+  displayName: string
+}
+
+export interface TicketUpdate {
+  id: string
+  admin: TicketPerson
+  status: TicketStatus
+  /** Se esta ação mudou o status (falso quando foi só uma resposta). */
+  statusChanged: boolean
+  note: string | null
+  createdAt: string
+}
+
+/** Uma linha na lista de chamados (painel do super admin, ou Meus chamados). */
+export interface TicketListItem {
+  id: string
+  /** Número amigável do chamado (ex.: "#42"). */
+  number: number
+  reporter: TicketPerson
+  type: TicketType
+  message: string
+  status: TicketStatus
+  createdAt: string
+  updatedAt: string
+  /** Última edição feita pelo autor (null = nunca editado). */
+  editedAt: string | null
+}
+
+export interface TicketDetail extends TicketListItem {
+  images: string[]
+  updates: TicketUpdate[]
 }

@@ -1,11 +1,15 @@
 using System.Text;
 using System.Threading.RateLimiting;
+using LmuTracker.Api.Auth;
 using LmuTracker.Api.Middleware;
 using LmuTracker.Api.Og;
 using LmuTracker.Infrastructure;
 using LmuTracker.Infrastructure.Auth;
+using LmuTracker.Infrastructure.Storage;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -16,6 +20,18 @@ builder.Services.AddControllers();
 builder.Services.AddOutputCache();
 builder.Services.AddScoped<OgCards>();
 builder.Services.AddScoped<SpaMeta>();
+
+// ---------- Chamados (bugs e sugestões) ----------
+// Prints ficam fora do build: em produção no volume /data (Tickets:UploadsPath), em dev numa pasta ignorada pelo git.
+var uploadsRoot = builder.Configuration["Tickets:UploadsPath"] is { Length: > 0 } configuredUploads
+    ? configuredUploads
+    : Path.Combine(builder.Environment.ContentRootPath, "uploads");
+var ticketImagesDir = Path.Combine(uploadsRoot, "tickets");
+Directory.CreateDirectory(ticketImagesDir);
+builder.Services.AddSingleton<ITicketImageStorage>(sp =>
+    new LocalTicketImageStorage(ticketImagesDir, sp.GetRequiredService<ILogger<LocalTicketImageStorage>>()));
+builder.Services.AddScoped<IAuthorizationHandler, SuperAdminHandler>();
+builder.Services.AddHostedService<SuperAdminSeeder>();
 
 // ---------- JWT ----------
 // Em dev o segredo vem do appsettings.Development.json. Em produção não há segredo versionado: ele é
@@ -47,7 +63,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ClockSkew = TimeSpan.FromMinutes(1),
         };
     });
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+    options.AddPolicy("SuperAdmin", policy => policy.RequireAuthenticatedUser().AddRequirements(new SuperAdminRequirement())));
 
 // ---------- Proxy (Caddy) ----------
 // Em produção a Api só é alcançada pelo Caddy, que manda o IP real no X-Forwarded-For. Sem confiar nele,
@@ -106,6 +123,18 @@ if (serveSpa)
             ctx.Context.Request.Path.StartsWithSegments("/assets") ? "public, max-age=31536000, immutable" : "no-cache",
     });
 }
+
+// Prints dos chamados. Nome aleatório (não dá para listar nem adivinhar), como no GameTracker.
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(Path.GetFullPath(ticketImagesDir)),
+    RequestPath = LocalTicketImageStorage.PublicPrefix.TrimEnd('/'),
+    OnPrepareResponse = ctx =>
+    {
+        ctx.Context.Response.Headers.CacheControl = "private, max-age=86400";
+        ctx.Context.Response.Headers.XContentTypeOptions = "nosniff";
+    },
+});
 
 app.UseCors("spa");
 app.UseRateLimiter();

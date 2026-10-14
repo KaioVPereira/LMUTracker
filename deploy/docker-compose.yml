@@ -44,6 +44,7 @@ services:
       ConnectionStrings__Default: ${LMU_DB}
       Jwt__SecretFile: /data/jwt.key        # gerado na 1ª subida e guardado no volume
       Site__BaseUrl: https://lmutracker.gamestrackers.com
+      Tickets__UploadsPath: /data/uploads   # prints dos chamados (no volume, sobrevive ao deploy)
     volumes:
       - api-data:/data
     networks:

@@ -6,6 +6,8 @@ import { DriverPage } from './pages/DriverPage'
 import { HeadToHeadPage } from './pages/HeadToHeadPage'
 import { LoginPage } from './pages/LoginPage'
 import { MyProfilePage } from './pages/MyProfilePage'
+import { MyTicketsPage } from './pages/MyTicketsPage'
+import { AdminTicketsPage } from './pages/AdminTicketsPage'
 import { RacePage } from './pages/RacePage'
 import { RacesPage } from './pages/RacesPage'
 import { RankingsPage } from './pages/RankingsPage'
@@ -28,6 +30,8 @@ export default function App() {
       <Route path="/pilotos/:driverId/vs/:otherId" element={<HeadToHeadPage />} />
       <Route path="/pilotos/:driverId" element={<DriverPage />} />
       <Route path="/perfil" element={<RequireAuth><MyProfilePage /></RequireAuth>} />
+      <Route path="/chamados" element={<RequireAuth><MyTicketsPage /></RequireAuth>} />
+      <Route path="/admin/chamados" element={<RequireAuth><AdminTicketsPage /></RequireAuth>} />
       <Route path="/vincular/retorno" element={<RequireAuth><SteamReturnPage /></RequireAuth>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

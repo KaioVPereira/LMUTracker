@@ -1,6 +1,7 @@
 using LmuTracker.Application.Auth;
 using LmuTracker.Application.Linking;
 using LmuTracker.Application.Lmu;
+using LmuTracker.Application.Tickets;
 using LmuTracker.Infrastructure.Linking;
 using LmuTracker.Infrastructure.Auth;
 using LmuTracker.Infrastructure.Persistence;
@@ -30,6 +31,7 @@ public static class DependencyInjection
         services.AddScoped<IHomeService, HomeService>();
         services.AddScoped<IDriverStatsService, DriverStatsService>();
         services.AddScoped<IExtrasService, ExtrasService>();
+        services.AddScoped<ITicketService, TicketService>();
 
         // ---- Vínculo Steam (OpenID) ----
         services.Configure<SiteOptions>(config.GetSection(SiteOptions.Section));

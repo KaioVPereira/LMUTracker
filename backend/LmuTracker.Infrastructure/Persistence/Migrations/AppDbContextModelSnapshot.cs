@@ -375,6 +375,120 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
                     b.ToTable("ScanEvents");
                 });
 
+            modelBuilder.Entity("LmuTracker.Domain.Entities.Ticket", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("EditedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(5000)
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Number")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Number"));
+
+                    b.Property<Guid>("ReporterId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Number")
+                        .IsUnique();
+
+                    b.HasIndex("ReporterId", "CreatedAt");
+
+                    b.HasIndex("Status", "CreatedAt");
+
+                    b.ToTable("Tickets");
+                });
+
+            modelBuilder.Entity("LmuTracker.Domain.Entities.TicketImage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("TicketId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TicketId");
+
+                    b.ToTable("TicketImages");
+                });
+
+            modelBuilder.Entity("LmuTracker.Domain.Entities.TicketUpdate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("AdminId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("StatusChanged")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid>("TicketId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AdminId");
+
+                    b.HasIndex("TicketId", "CreatedAt");
+
+                    b.ToTable("TicketUpdates");
+                });
+
             modelBuilder.Entity("LmuTracker.Domain.Entities.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -393,6 +507,9 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
+
+                    b.Property<bool>("IsSuperAdmin")
+                        .HasColumnType("bit");
 
                     b.Property<DateTime?>("LinkedAt")
                         .HasColumnType("datetime2");
@@ -451,6 +568,47 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
                     b.Navigation("ScanEvent");
                 });
 
+            modelBuilder.Entity("LmuTracker.Domain.Entities.Ticket", b =>
+                {
+                    b.HasOne("LmuTracker.Domain.Entities.User", "Reporter")
+                        .WithMany()
+                        .HasForeignKey("ReporterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Reporter");
+                });
+
+            modelBuilder.Entity("LmuTracker.Domain.Entities.TicketImage", b =>
+                {
+                    b.HasOne("LmuTracker.Domain.Entities.Ticket", "Ticket")
+                        .WithMany("Images")
+                        .HasForeignKey("TicketId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Ticket");
+                });
+
+            modelBuilder.Entity("LmuTracker.Domain.Entities.TicketUpdate", b =>
+                {
+                    b.HasOne("LmuTracker.Domain.Entities.User", "Admin")
+                        .WithMany()
+                        .HasForeignKey("AdminId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("LmuTracker.Domain.Entities.Ticket", "Ticket")
+                        .WithMany("Updates")
+                        .HasForeignKey("TicketId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Admin");
+
+                    b.Navigation("Ticket");
+                });
+
             modelBuilder.Entity("LmuTracker.Domain.Entities.RaceSplit", b =>
                 {
                     b.Navigation("Results");
@@ -459,6 +617,13 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("LmuTracker.Domain.Entities.ScanEvent", b =>
                 {
                     b.Navigation("Splits");
+                });
+
+            modelBuilder.Entity("LmuTracker.Domain.Entities.Ticket", b =>
+                {
+                    b.Navigation("Images");
+
+                    b.Navigation("Updates");
                 });
 #pragma warning restore 612, 618
         }

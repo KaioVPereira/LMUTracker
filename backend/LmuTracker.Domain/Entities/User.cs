@@ -14,6 +14,9 @@ public class User : Entity
     public string PasswordHash { get; set; } = null!;
     public string DisplayName { get; set; } = null!;
 
+    /// <summary>Dono da plataforma: vê e responde todos os chamados. Vem da configuração (Admin:SuperAdminUsernames).</summary>
+    public bool IsSuperAdmin { get; set; }
+
     // ---------- Vínculo com o LMU (via Steam) ----------
 
     /// <summary>SteamID64 do piloto, provado pelo login Steam (OpenID). Null = conta ainda não vinculada.</summary>

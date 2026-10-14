@@ -12,6 +12,7 @@ public record UserDto(
     string Email,
     string? SteamId,
     DateTime? LinkedAt,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    bool IsSuperAdmin = false);
 
 public record AuthResponse(string AccessToken, DateTime AccessTokenExpiresAt, UserDto User);

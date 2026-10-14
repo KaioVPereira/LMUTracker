@@ -3,6 +3,7 @@ import { Link, NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { AccountMenu } from './AccountMenu'
 import { CommandPalette } from './CommandPalette'
+import { FeedbackWidget } from './FeedbackWidget'
 
 export function Logo() {
   return (
@@ -83,6 +84,7 @@ export function TopBar() {
         <NavLink to="/perfil"><Icon name="user" />{user ? 'Perfil' : 'Entrar'}</NavLink>
       </nav>
       {searchOpen && <CommandPalette onClose={() => setSearchOpen(false)} />}
+      <FeedbackWidget />
     </>
   )
 }

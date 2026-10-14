@@ -78,5 +78,5 @@ public sealed class AuthService : IAuthService
     }
 
     private static UserDto ToDto(User u) =>
-        new(u.Id, u.Username, u.DisplayName, u.Email, u.SteamId, u.LinkedAt, u.CreatedAt);
+        new(u.Id, u.Username, u.DisplayName, u.Email, u.SteamId, u.LinkedAt, u.CreatedAt, u.IsSuperAdmin);
 }
