@@ -40,7 +40,7 @@ export function fmtDelta(n: number | null | undefined): { text: string; cls: str
 
 export const fmtInt = (n: number) => n.toLocaleString('pt-BR')
 
-const TIERS: Record<string, string> = { beginner: 'Iniciante', intermediate: 'Intermediário', advanced: 'Avançado', weekly: 'Semanal', special: 'Especial' }
+const TIERS: Record<string, string> = { beginner: 'Iniciante', intermediate: 'Intermediário', advanced: 'Avançado', weekly: 'Semanal', special: 'Especial', championship: 'Campeonato' }
 export const tierLabel = (t: string | null) => (t ? (TIERS[t] ?? t) : '—')
 
 const TYPES: Record<string, string> = { daily: 'Diária', weekly: 'Semanal', special: 'Especial', championship: 'Campeonato', hosted: 'Hospedada' }

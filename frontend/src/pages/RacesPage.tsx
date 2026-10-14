@@ -31,6 +31,7 @@ const FILTERS = [
   { key: 'advanced', label: 'Avançado' },
   { key: 'weekly', label: 'Semanais' },
   { key: 'special', label: 'Especiais' },
+  { key: 'championship', label: 'Campeonatos' },
 ]
 
 export function RacesPage() {

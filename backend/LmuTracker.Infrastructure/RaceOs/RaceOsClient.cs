@@ -130,6 +130,18 @@ public sealed class RaceOsClient
         return series;
     }
 
+    /// <summary>
+    /// GET cru (JSON sem modelo) — para formatos ainda não vistos ao vivo, como os campeonatos. Falha HTTP vira exceção.
+    /// </summary>
+    public async Task<JsonElement> GetRawAsync(string path, CancellationToken ct)
+    {
+        using var resp = await SendAsync(HttpMethod.Get, path, null, ct);
+        if (!resp.IsSuccessStatusCode)
+            throw new InvalidOperationException($"{path} => HTTP {(int)resp.StatusCode}");
+        var bytes = await resp.Content.ReadAsByteArrayAsync(ct);
+        using var doc = JsonDocument.Parse(bytes);
+        return doc.RootElement.Clone();
+    }
 
     // ---------- Expansão ----------
 

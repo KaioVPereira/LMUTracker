@@ -115,7 +115,7 @@ public sealed class LmuQueryService : ILmuQueryService
         // Corrida com resultado gravado aparece mesmo se voltou à fila para ser baixada de novo (reprocessamento):
         // os splits antigos só são trocados quando o novo download termina.
         var q = _db.ScanEvents.Where(e => e.Splits.Any());
-        if (tier is "weekly" or "special") q = q.Where(e => e.EventType == tier);
+        if (tier is "weekly" or "special" or "championship") q = q.Where(e => e.EventType == tier);
         else if (!string.IsNullOrWhiteSpace(tier)) q = q.Where(e => e.Tier == tier);
         if (!string.IsNullOrWhiteSpace(track)) q = q.Where(e => e.Track == track);
         if (!string.IsNullOrWhiteSpace(car)) q = q.Where(e => e.Splits.Any(s => s.Results.Any(r => r.CarType == car)));

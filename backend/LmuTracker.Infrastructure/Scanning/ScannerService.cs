@@ -18,6 +18,8 @@ public sealed class ScannerService
     private static readonly string[] Tiers = { "beginner", "intermediate", "advanced" };
     // special-events/{kind}: as telas "Weekly Races" e "Special Events" do jogo (mesmo formato, mesma tela por dentro).
     private static readonly string[] SpecialKinds = { "weekly", "special" };
+    // championships/active{filtro}: os campeonatos normais, os de esports e os da VLMS são listas separadas no jogo.
+    private static readonly string[] ChampionshipLists = { "", "?esports=true", "?vlms=true" };
     private const int MaxSplits = 40; // trava de segurança
 
     /// <summary>
@@ -129,8 +131,69 @@ public sealed class ScannerService
             }
         }
 
+        // Campeonatos: também isolados (formato lido do código do jogo, ainda não visto ao vivo).
+        try
+        {
+            found += await DiscoverChampionshipsAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            DiscardPendingChanges();
+            _log.LogWarning(ex, "Scanner: não consegui ler os campeonatos; o resto segue normal.");
+        }
+
         if (found > 0)
             _log.LogInformation("Scanner: {Count} novas corridas na agenda guardadas.", found);
+    }
+
+    /// <summary>
+    /// Horários das rodadas dos campeonatos ativos. Cada horário é uma corrida (eventId) com splits, baixada como
+    /// as outras pelo event/overview com eventType "championship". Ver <see cref="Championships"/>.
+    /// </summary>
+    private async Task<int> DiscoverChampionshipsAsync(CancellationToken ct)
+    {
+        var ids = new HashSet<string>();
+        foreach (var filter in ChampionshipLists)
+        {
+            try
+            {
+                ids.UnionWith(Championships.Ids(await _raceos.GetRawAsync($"/api/v1/championships/active{filter}", ct)));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _log.LogDebug(ex, "championships/active{Filter} falhou.", filter);
+            }
+        }
+
+        var added = 0;
+        var slots = 0;
+        foreach (var id in ids)
+        {
+            var detail = await _raceos.GetRawAsync($"/api/v1/championship/{id}", ct);
+            foreach (var slot in Championships.Slots(detail, id))
+            {
+                slots++;
+                var cfg = new EventConfiguration
+                {
+                    Title = slot.Title,
+                    Starts = slot.Starts,
+                    Tier = new EventTier { Name = "championship" },
+                    Content = new EventContent { Track = new EventTrack { Name = slot.Scene, Friendly = slot.TrackName } },
+                    Extra = new() { ["championship"] = JsonSerializer.SerializeToElement(slot.Info) },
+                };
+                var e = new RaceOsEvent
+                {
+                    Id = slot.EventId, SeriesId = id, Type = "championship", Starts = slot.Starts, RaceEndsAt = slot.Ends,
+                    Configuration = cfg,
+                };
+                if (await UpsertEventAsync(e, "championship", "championship", ct)) added++;
+            }
+        }
+        if (_db.ChangeTracker.HasChanges()) await _db.SaveChangesAsync(ct);
+        if (added > 0)
+            _log.LogInformation("Scanner: {Count} corridas de campeonato novas ({Champs} campeonatos, {Slots} horários).",
+                added, ids.Count, slots);
+        return added;
     }
 
     /// <summary>Grava (ou atualiza, se ainda pendente) uma corrida descoberta. Devolve true se for nova.</summary>
