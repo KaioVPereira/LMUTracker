@@ -8,7 +8,7 @@ public record LeaderboardRowDto(
     double BestLap, double? GapToFirst, string EventId, DateTime SetAt, int SplitNo);
 
 public record LeaderboardDto(
-    string? Track, string? CarClass, string? Car, string Setup, int Drivers, IReadOnlyList<LeaderboardRowDto> Rows);
+    string? Track, string? CarClass, string? Car, string Setup, string? Country, int Drivers, IReadOnlyList<LeaderboardRowDto> Rows);
 
 public record TrackRecordDto(
     string? CarClass, bool FixedSetup, double BestLap, Guid? DriverId, string DriverName, string? Car,
@@ -42,7 +42,8 @@ public record FollowedDriverDto(
 public interface IExtrasService
 {
     /// <summary><paramref name="setup"/>: "fixed", "open" ou null (todos). Classe: hyper|lmp2|lmp3|gt3.</summary>
-    Task<LeaderboardDto> LeaderboardAsync(string? track, string? carClass, string? car, string? setup, int take,
+    /// <paramref name="country"/>: nacionalidade do piloto (código de 2 letras, ex.: "BR"); null = todos.
+    Task<LeaderboardDto> LeaderboardAsync(string? track, string? carClass, string? car, string? setup, string? country, int take,
         CancellationToken ct = default);
     Task<TrackDetailDto?> TrackAsync(string track, CancellationToken ct = default);
     Task<CarDetailDto?> CarAsync(string car, CancellationToken ct = default);

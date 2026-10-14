@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import type { CarListItem, CarRanking, DriverRankingKind, Leaderboard, Ranking, RankingRow, SearchTrack } from '../api/types'
+import type { CarListItem, CarRanking, Country, DriverRankingKind, Leaderboard, Ranking, RankingRow, SearchTrack } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
 import { ClassChip, EmptyState, ErrorBox, Rank, RowsSkeleton } from '../components/Bits'
 import { LeaderboardTable } from '../components/Leaderboard'
@@ -8,7 +8,7 @@ import { TopBar } from '../components/TopBar'
 import { classShort } from '../lib/classes'
 import { CLASS_TABS, SETUP_TABS } from '../lib/filters'
 import { useFollows } from '../lib/follows'
-import { fmtPct } from '../lib/format'
+import { countryName, fmtPct } from '../lib/format'
 import { useApi } from '../lib/useApi'
 
 type TabKey = 'voltas' | 'dr' | 'sr' | 'vitorias' | 'poles' | 'recuperacao' | 'em-alta' | 'limpos' | 'ativos' | 'carros'
@@ -55,11 +55,11 @@ export function RankingsPage() {
     if ('classe' in next) p.delete('carro') // carro de outra classe não faz sentido
     setParams(p, { replace: true })
   }
-  // Trocar de aba mantém só o que vale em todas (classe e período).
+  // Trocar de aba mantém só o que vale em todas (classe, período e país).
   const openTab = (key: TabKey) => {
     const p = new URLSearchParams()
     if (key !== 'voltas') p.set('aba', key)
-    for (const k of ['classe', 'periodo']) { const v = params.get(k); if (v) p.set(k, v) }
+    for (const k of ['classe', 'periodo', 'pais']) { const v = params.get(k); if (v) p.set(k, v) }
     setParams(p, { replace: true })
   }
 
@@ -87,6 +87,26 @@ export function RankingsPage() {
   )
 }
 
+/** Filtro de país: lista os países com pilotos registrados (os com mais pilotos primeiro), nome em português. */
+function CountrySelect({ value, onPick }: { value: string; onPick: (code: string) => void }) {
+  const countries = useApi<Country[]>('/lmu/rankings/countries')
+  const list = countries.data ?? []
+  // Por link direto com um país que ainda não está na lista, ele continua aparecendo como escolhido.
+  const known = !value || list.some((c) => c.code === value)
+  return (
+    <label className="filter">
+      <span>País</span>
+      <select value={value} onChange={(e) => onPick(e.target.value)}>
+        <option value="">Todos os países</option>
+        {!known && <option value={value}>{countryName(value)}</option>}
+        {list.map((c) => (
+          <option key={c.code} value={c.code}>{countryName(c.code)} ({c.drivers.toLocaleString('pt-BR')})</option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
 function Chips({ label, items, value, onPick, classes = false }: {
   label: string; items: { key: string; label: string }[]; value: string; onPick: (k: string) => void; classes?: boolean
 }) {
@@ -111,12 +131,14 @@ function LapsPanel({ params, set }: { params: URLSearchParams; set: SetParams })
   const cls = params.get('classe') || 'gt3'
   const setup = params.get('setup') ?? ''
   const car = params.get('carro') ?? ''
+  const country = params.get('pais') ?? ''
 
   const q = new URLSearchParams({ take: '50' })
   if (track) q.set('track', track)
   if (cls) q.set('class', cls)
   if (setup) q.set('setup', setup)
   if (car) q.set('car', car)
+  if (country) q.set('country', country)
   const lb = useApi<Leaderboard>(track ? `/lmu/leaderboard?${q}` : null)
   const carsOfClass = (cars.data ?? []).filter((c) => !cls || classShort(c.carClass).toLowerCase() === cls)
 
@@ -136,6 +158,7 @@ function LapsPanel({ params, set }: { params: URLSearchParams; set: SetParams })
             {carsOfClass.map((c) => <option key={c.car} value={c.car}>{c.car}</option>)}
           </select>
         </label>
+        <CountrySelect value={country} onPick={(k) => set({ pais: k })} />
       </div>
       <Chips label="Classe" items={CLASS_TABS} value={cls} onPick={(k) => set({ classe: k })} classes />
       <Chips label="Setup" items={SETUP_TABS} value={setup} onPick={(k) => set({ setup: k })} />
@@ -211,10 +234,12 @@ function DriverRankingPanel({ kind, params, set }: { kind: DriverRankingKind; pa
   const rankOnly = kind === 'dr' || kind === 'sr'
   const period = params.get('periodo') ?? '30d'
   const cls = rankOnly ? '' : (params.get('classe') ?? '')
+  const country = params.get('pais') ?? ''
   const me = user?.driver?.driverId ?? null
 
   const q = new URLSearchParams({ period, take: '50' })
   if (cls) q.set('class', cls)
+  if (country) q.set('country', country)
   if (me) q.set('me', me)
   const r = useApi<Ranking>(`/lmu/rankings/drivers/${kind}?${q}`)
   const cols = columnsFor(kind)
@@ -242,18 +267,19 @@ function DriverRankingPanel({ kind, params, set }: { kind: DriverRankingKind; pa
 
   return (
     <div className="rk-panel">
+      <div className="filters"><CountrySelect value={country} onPick={(k) => set({ pais: k })} /></div>
       <Chips label={rankOnly ? 'Pilotos vistos em' : 'Período'} items={periodItems} value={period} onPick={(k) => set({ periodo: k === '30d' ? '' : k })} />
       {!rankOnly && <Chips label="Classe" items={ALL_CLASSES} value={cls} onPick={(k) => set({ classe: k })} classes />}
 
       {data?.me && (
         <div className="rk-me">
           <span className="rk-me-pos">#{data.me.rank.toLocaleString('pt-BR')}</span>
-          <span>é a sua posição entre <b>{data.total.toLocaleString('pt-BR')}</b> pilotos neste ranking.</span>
+          <span>é a sua posição entre <b>{data.total.toLocaleString('pt-BR')}</b> pilotos neste ranking{data.country && <> · <b>{countryName(data.country)}</b></>}.</span>
         </div>
       )}
 
       {r.loading && !data ? <RowsSkeleton rows={8} /> : r.error ? <ErrorBox message={r.error} onRetry={r.reload} /> : !data?.rows.length ? (
-        <EmptyState title="Ninguém neste recorte ainda">Troque o período ou a classe — ou volte depois das próximas corridas.</EmptyState>
+        <EmptyState title="Ninguém neste recorte ainda">Troque o período, a classe ou o país — ou volte depois das próximas corridas.</EmptyState>
       ) : (
         <>
           <div className="tbl-wrap">
@@ -268,7 +294,7 @@ function DriverRankingPanel({ kind, params, set }: { kind: DriverRankingKind; pa
             </table>
           </div>
           <p className="note">
-            {data.total.toLocaleString('pt-BR')} pilotos neste recorte
+            {data.total.toLocaleString('pt-BR')} pilotos neste recorte{data.country && <> · país: {countryName(data.country)}</>}
             {data.minStarts > 0 && <> · mínimo de {data.minStarts} corridas no período</>}
             {rankOnly && <> · rank do jogo como visto na última corrida de cada piloto</>}
             {kind === 'wins' && <> · vitória = P1 da classe no split</>}
@@ -284,13 +310,16 @@ function DriverRankingPanel({ kind, params, set }: { kind: DriverRankingKind; pa
 function CarsPanel({ params, set }: { params: URLSearchParams; set: SetParams }) {
   const period = params.get('periodo') ?? '30d'
   const cls = params.get('classe') ?? ''
+  const country = params.get('pais') ?? ''
   const q = new URLSearchParams({ period })
   if (cls) q.set('class', cls)
+  if (country) q.set('country', country)
   const r = useApi<CarRanking>(`/lmu/rankings/cars?${q}`)
   const data = r.data
 
   return (
     <div className="rk-panel">
+      <div className="filters"><CountrySelect value={country} onPick={(k) => set({ pais: k })} /></div>
       <Chips label="Período" items={PERIODS} value={period} onPick={(k) => set({ periodo: k === '30d' ? '' : k })} />
       <Chips label="Classe" items={ALL_CLASSES} value={cls} onPick={(k) => set({ classe: k })} classes />
       {r.loading && !data ? <RowsSkeleton rows={8} /> : r.error ? <ErrorBox message={r.error} onRetry={r.reload} /> : !data?.rows.length ? (
@@ -321,7 +350,7 @@ function CarsPanel({ params, set }: { params: URLSearchParams; set: SetParams })
               </tbody>
             </table>
           </div>
-          <p className="note">Vitória = P1 da classe no split · carros com pelo menos {data.minStarts} largadas no período · chegada média na classe, só de quem terminou.</p>
+          <p className="note">Vitória = P1 da classe no split · carros com pelo menos {data.minStarts} largadas no período · chegada média na classe, só de quem terminou{data.country && <> · só largadas de pilotos do país escolhido ({countryName(data.country)})</>}.</p>
         </>
       )}
     </div>

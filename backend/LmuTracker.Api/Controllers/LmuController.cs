@@ -35,8 +35,8 @@ public class LmuController : ApiControllerBase
     [OutputCache(Duration = 30)]
     public async Task<ActionResult<LeaderboardDto>> Leaderboard(
         [FromQuery] string? track, [FromQuery(Name = "class")] string? carClass, [FromQuery] string? car,
-        [FromQuery] string? setup, [FromQuery] int take = 50, CancellationToken ct = default)
-        => Ok(await _extras.LeaderboardAsync(track, carClass, car, setup, take, ct));
+        [FromQuery] string? setup, [FromQuery] string? country, [FromQuery] int take = 50, CancellationToken ct = default)
+        => Ok(await _extras.LeaderboardAsync(track, carClass, car, setup, country, take, ct));
 
     /// <summary>
     /// Rankings de pilotos: dr | sr | wins | risers | clean | active | poles | gains, por classe e período (7d|30d|all).
@@ -45,16 +45,23 @@ public class LmuController : ApiControllerBase
     [HttpGet("rankings/drivers/{kind}")]
     [OutputCache(Duration = 30)]
     public async Task<ActionResult<RankingDto>> DriverRanking(
-        string kind, [FromQuery(Name = "class")] string? carClass, [FromQuery] string? period,
+        string kind, [FromQuery(Name = "class")] string? carClass, [FromQuery] string? period, [FromQuery] string? country,
         [FromQuery] Guid? me, [FromQuery] int take = 50, CancellationToken ct = default)
-        => await _rankings.DriversAsync(kind, carClass, period, take, me, ct) is { } r ? Ok(r) : NotFound();
+        => await _rankings.DriversAsync(kind, carClass, period, country, take, me, ct) is { } r ? Ok(r) : NotFound();
 
     /// <summary>Ranking de carros: vitórias na classe, taxa de vitória e pódios, por classe e período.</summary>
     [HttpGet("rankings/cars")]
     [OutputCache(Duration = 30)]
     public async Task<ActionResult<CarRankingDto>> CarRanking(
-        [FromQuery(Name = "class")] string? carClass, [FromQuery] string? period, CancellationToken ct = default)
-        => Ok(await _rankings.CarsAsync(carClass, period, ct));
+        [FromQuery(Name = "class")] string? carClass, [FromQuery] string? period, [FromQuery] string? country,
+        CancellationToken ct = default)
+        => Ok(await _rankings.CarsAsync(carClass, period, country, ct));
+
+    /// <summary>Países com pilotos registrados (código e quantos pilotos), para o filtro de país dos rankings.</summary>
+    [HttpGet("rankings/countries")]
+    [OutputCache(Duration = 300)]
+    public async Task<ActionResult<IReadOnlyList<CountryDto>>> Countries(CancellationToken ct)
+        => Ok(await _rankings.CountriesAsync(ct));
 
     /// <summary>Página da pista: recordes por classe, carros mais rápidos, números gerais.</summary>
     [HttpGet("tracks/{track}")]

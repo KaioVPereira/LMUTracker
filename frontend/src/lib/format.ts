@@ -118,3 +118,13 @@ export function fmtClock(ms: number): string {
   const ss = String(s).padStart(2, '0')
   return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`
 }
+
+const regionNames = (() => {
+  try { return new Intl.DisplayNames(['pt-BR'], { type: 'region' }) } catch { return null }
+})()
+
+/** "BR" -> "Brasil". Código que o navegador não conhece fica como veio. */
+export function countryName(code: string | null | undefined): string {
+  if (!code) return '—'
+  try { return regionNames?.of(code.toUpperCase()) ?? code } catch { return code }
+}

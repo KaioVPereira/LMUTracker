@@ -593,7 +593,7 @@ export interface LeaderboardRow {
   splitNo: number
 }
 
-export interface Leaderboard { track: string | null; carClass: string | null; car: string | null; setup: string; drivers: number; rows: LeaderboardRow[] }
+export interface Leaderboard { track: string | null; carClass: string | null; car: string | null; setup: string; country: string | null; drivers: number; rows: LeaderboardRow[] }
 
 export interface TrackRecord {
   carClass: string | null
@@ -728,6 +728,7 @@ export interface RankingRow {
 export interface Ranking {
   kind: DriverRankingKind
   carClass: string | null
+  country: string | null
   period: RankingPeriod
   minStarts: number
   total: number
@@ -749,8 +750,15 @@ export interface CarRankingRow {
 
 export interface CarRanking {
   carClass: string | null
+  country: string | null
   period: RankingPeriod
   minStarts: number
   total: number
   rows: CarRankingRow[]
+}
+
+/** País no filtro dos rankings: código de nacionalidade do jogo ("BR") e quantos pilotos. */
+export interface Country {
+  code: string
+  drivers: number
 }

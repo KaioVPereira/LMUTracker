@@ -53,18 +53,20 @@ public sealed class ExtrasService : IExtrasService
 
     // ---------------------------------------------------------------- rankings
 
-    public async Task<LeaderboardDto> LeaderboardAsync(string? track, string? carClass, string? car, string? setup, int take,
-        CancellationToken ct = default)
+    public async Task<LeaderboardDto> LeaderboardAsync(string? track, string? carClass, string? car, string? setup, string? country,
+        int take, CancellationToken ct = default)
     {
         take = Math.Clamp(take, 1, MaxTake);
         setup = setup is "fixed" or "open" ? setup : null;
-        var key = $"lb:{track}|{carClass}|{car}|{setup}|{take}";
+        country = RankingsService.NormCountry(country);
+        var key = $"lb:{track}|{carClass}|{car}|{setup}|{country}|{take}";
         return (await _cache.GetOrCreateAsync(key, async entry =>
         {
             entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(60);
             var q = _db.RaceResults.AsNoTracking().Where(r => r.BestLapTime != null && r.SteamId != null);
             if (!string.IsNullOrWhiteSpace(track)) q = q.Where(r => r.RaceSplit.ScanEvent.Track == track);
             if (!string.IsNullOrWhiteSpace(car)) q = q.Where(r => r.CarType == car);
+            if (country is not null) q = q.Where(r => r.Nationality == country);
             q = OfSetup(OfClass(q, carClass), setup);
 
             // 1) A melhor volta de cada piloto no recorte (GroupBy + Min traduz para SQL); 2) os detalhes da corrida
@@ -94,7 +96,7 @@ public sealed class ExtrasService : IExtrasService
             var rows = best.Select((b, i) => new LeaderboardRowDto(i + 1, ids.TryGetValue(b.SteamId!, out var id) ? id : null,
                 b.Name, b.Nationality, b.CarType, b.CarClass, b.Lap, first is null || i == 0 ? null : Math.Round(b.Lap - first.Value, 3),
                 b.EventId, b.At, b.SplitNo)).ToList();
-            return new LeaderboardDto(track, carClass, car, setup ?? "all", drivers, rows);
+            return new LeaderboardDto(track, carClass, car, setup ?? "all", country, drivers, rows);
         }))!;
     }
 

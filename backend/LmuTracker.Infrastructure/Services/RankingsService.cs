@@ -41,6 +41,10 @@ public sealed class RankingsService : IRankingsService
 
     private static string NormPeriod(string? p) => p is "7d" or "30d" or "all" ? p : "30d";
 
+    /// <summary>Código de nacionalidade como o jogo grava ("BR", "GB"…); vazio ou inválido = sem filtro.</summary>
+    internal static string? NormCountry(string? c) =>
+        c?.Trim() is { Length: >= 2 and <= 3 } t && t.All(char.IsLetter) ? t.ToUpperInvariant() : null;
+
     private static DateTime? From(string period) => period switch
     {
         "7d" => DateTime.UtcNow.AddDays(-7),
@@ -95,8 +99,10 @@ public sealed class RankingsService : IRankingsService
             ? i * 300 + (Math.Clamp(t, 1, 3) - 1) * 100 + Math.Clamp(progress ?? 0, 0, 100)
             : -1;
 
-    public async Task<RankingDto?> DriversAsync(string kind, string? carClass, string? period, int take, Guid? me, CancellationToken ct = default)
+    public async Task<RankingDto?> DriversAsync(string kind, string? carClass, string? period, string? country, int take, Guid? me,
+        CancellationToken ct = default)
     {
+        country = NormCountry(country);
         kind = kind.ToLowerInvariant();
         if (kind is not ("dr" or "sr" or "wins" or "risers" or "clean" or "active" or "poles" or "gains")) return null;
         period = NormPeriod(period);
@@ -174,6 +180,14 @@ public sealed class RankingsService : IRankingsService
                 break;
         }
 
+        // País: a lista inteira é filtrada antes de numerar, então a posição é dentro do país.
+        if (country is not null)
+            ordered = ordered.Where(o => NationalityOf(o.SteamId) == country).ToList();
+
+        string? NationalityOf(string steamId) =>
+            NormCountry((drivers.TryGetValue(steamId, out var d) ? d.Nationality : null)
+                        ?? (bySteam.TryGetValue(steamId, out var s) ? s.Nationality : null));
+
         RankingRowDto Row(int i)
         {
             var (steamId, value, extra) = ordered[i];
@@ -191,16 +205,18 @@ public sealed class RankingsService : IRankingsService
             var at = ordered.FindIndex(o => o.SteamId == mySteam);
             if (at >= 0) mine = Row(at);
         }
-        return new RankingDto(kind, carClass, period, minStarts, ordered.Count, rows, mine);
+        return new RankingDto(kind, carClass, country, period, minStarts, ordered.Count, rows, mine);
     }
 
-    public async Task<CarRankingDto> CarsAsync(string? carClass, string? period, CancellationToken ct = default)
+    public async Task<CarRankingDto> CarsAsync(string? carClass, string? period, string? country, CancellationToken ct = default)
     {
         period = NormPeriod(period);
-        return (await _cache.GetOrCreateAsync($"rk:cars:{carClass}|{period}", async e =>
+        country = NormCountry(country);
+        return (await _cache.GetOrCreateAsync($"rk:cars:{carClass}|{period}|{country}", async e =>
         {
             e.AbsoluteExpirationRelativeToNow = CacheFor;
             var q = ExtrasService.OfClass(_db.RaceResults.AsNoTracking().Where(r => r.CarType != null), carClass);
+            if (country is not null) q = q.Where(r => r.Nationality == country);
             if (From(period) is { } from)
                 q = q.Where(r => (r.RaceSplit.ScanEvent.EventStartsAt ?? r.RaceSplit.ScanEvent.RaceStartsAt) >= from);
             var cars = await q
@@ -221,7 +237,16 @@ public sealed class RankingsService : IRankingsService
                 .Select((c, i) => new CarRankingRowDto(i + 1, c.Car, c.Class, c.Starts, c.Wins, c.Podiums, c.Drivers,
                     Math.Round((double)c.Wins / c.Starts, 3), c.Avg is null ? null : Math.Round(c.Avg.Value, 1)))
                 .ToList();
-            return new CarRankingDto(carClass, period, MinCarStarts, rows.Count, rows);
+            return new CarRankingDto(carClass, country, period, MinCarStarts, rows.Count, rows);
         }))!;
     }
+
+    public async Task<IReadOnlyList<CountryDto>> CountriesAsync(CancellationToken ct = default) =>
+        (await DriversIndexAsync(ct)).Values
+            .Select(d => NormCountry(d.Nationality))
+            .Where(c => c is not null)
+            .GroupBy(c => c!)
+            .Select(g => new CountryDto(g.Key, g.Count()))
+            .OrderByDescending(c => c.Drivers)
+            .ToList();
 }
