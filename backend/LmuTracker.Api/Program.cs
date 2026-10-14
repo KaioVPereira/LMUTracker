@@ -30,6 +30,8 @@ var ticketImagesDir = Path.Combine(uploadsRoot, "tickets");
 Directory.CreateDirectory(ticketImagesDir);
 builder.Services.AddSingleton<ITicketImageStorage>(sp =>
     new LocalTicketImageStorage(ticketImagesDir, sp.GetRequiredService<ILogger<LocalTicketImageStorage>>()));
+// Fica aqui (e não no AddInfrastructure) porque depende do armazenamento dos prints, que só a Api tem.
+builder.Services.AddScoped<LmuTracker.Application.Tickets.ITicketService, LmuTracker.Infrastructure.Services.TicketService>();
 builder.Services.AddScoped<IAuthorizationHandler, SuperAdminHandler>();
 builder.Services.AddHostedService<SuperAdminSeeder>();
 
@@ -101,8 +103,11 @@ builder.Services.AddRateLimiter(options =>
 // Api estão no mesmo domínio.
 var origins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>()
     ?? new[] { "http://localhost:5173", "http://localhost:3000" };
+// O app Android (Capacitor) serve o front de https://localhost e chama a Api pelo endereço completo, então essa
+// origem vale em todo ambiente (igual ao Finanças).
+string[] nativeAppOrigins = ["https://localhost", "capacitor://localhost"];
 builder.Services.AddCors(o => o.AddPolicy("spa", p =>
-    p.WithOrigins(origins).AllowAnyHeader().AllowAnyMethod()));
+    p.WithOrigins([.. origins, .. nativeAppOrigins]).AllowAnyHeader().AllowAnyMethod()));
 
 var app = builder.Build();
 

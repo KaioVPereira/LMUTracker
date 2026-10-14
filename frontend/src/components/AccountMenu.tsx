@@ -1,7 +1,9 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import { useAppUpdate } from '../lib/appUpdate'
 import { initials, rankClass } from '../lib/format'
+import { isNative } from '../lib/native'
 import { startSteamLink } from '../lib/steam'
 
 /** "Silver 2" -> "S2" (cabe na barra do celular; o título completo vai no title e no menu). */
@@ -25,6 +27,7 @@ export function AccountMenu() {
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
   }, [open])
 
+  const { updateAvailable } = useAppUpdate()
   if (!user) return null
   const close = () => setOpen(false)
   const d = user.driver
@@ -33,7 +36,7 @@ export function AccountMenu() {
     <div className="acct" ref={root}>
       <button ref={button} type="button" className="user-chip acct-btn" aria-haspopup="menu" aria-expanded={open}
         aria-controls={menuId} onClick={() => setOpen((o) => !o)}>
-        <span className="ava" aria-hidden="true">{initials(user.displayName)}</span>
+        <span className="ava" aria-hidden="true">{initials(user.displayName)}{updateAvailable && <i className="ava-dot" />}</span>
         <span className="name">{user.displayName}</span>
         {d?.driverRankTitle && (
           <span className="acct-ranks">
@@ -69,6 +72,11 @@ export function AccountMenu() {
           <Link to="/chamados" role="menuitem" className="acct-item" onClick={close}>
             <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.5 5h13L22 12v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6z" /></svg>
             Meus chamados
+          </Link>
+          <Link to="/app" role="menuitem" className="acct-item" onClick={close}>
+            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="2.5" width="12" height="19" rx="2.5" /><path d="M11 18h2" /></svg>
+            {isNative ? 'Versão do app' : 'App Android'}
+            {updateAvailable && <span className="pill me acct-new">nova versão</span>}
           </Link>
           {user.isSuperAdmin && (
             <Link to="/admin/chamados" role="menuitem" className="acct-item" onClick={close}>

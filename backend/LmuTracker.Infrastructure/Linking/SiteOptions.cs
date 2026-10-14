@@ -12,4 +12,13 @@ public class SiteOptions
 
     public string Realm => BaseUrl.TrimEnd('/') + "/";
     public string SteamReturnUrl => BaseUrl.TrimEnd('/') + SteamReturnPath;
+
+    /// <summary>
+    /// Origem do app Android (Capacitor serve o front de https://localhost). No app o login da Steam abre dentro do
+    /// próprio app e volta para cá, onde o token da sessão já está.
+    /// </summary>
+    public string AppOrigin { get; set; } = "https://localhost";
+
+    public string AppRealm => AppOrigin.TrimEnd('/') + "/";
+    public string AppSteamReturnUrl => AppOrigin.TrimEnd('/') + SteamReturnPath;
 }

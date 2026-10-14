@@ -48,3 +48,5 @@ Thumbs.db
 # Build do front copiado só para testar a Api servindo o site localmente (na imagem ele vem do Dockerfile.site)
 backend/LmuTracker.Api/wwwroot/
 backend/LmuTracker.Api/uploads/
+backend/LmuTracker.Api/App_Data/
+apk/

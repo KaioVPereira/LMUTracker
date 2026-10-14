@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import type { TicketStatus, TicketType, TicketUpdate } from '../api/types'
+import { apiUrl } from '../api/client'
 import { fmtRelative } from '../lib/format'
 import { MAX_TICKET_IMAGES, STATUS_META, TYPE_META, type useImageAttachments } from '../lib/tickets'
 
@@ -55,7 +56,7 @@ export function ImageAttachmentsField({ attachments }: { attachments: ReturnType
         <div className="tk-thumbs">
           {images.map((img) => (
             <div key={img.id} className="tk-thumb">
-              <img src={img.dataUrl ?? img.url} alt="" />
+              <img src={img.dataUrl ?? (img.url ? apiUrl(img.url) : '')} alt="" />
               <button type="button" onClick={() => remove(img.id)} aria-label="Remover imagem">
                 <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
               </button>
@@ -86,7 +87,7 @@ export function TicketImages({ urls }: { urls: string[] }) {
   return (
     <div className="tk-thumbs">
       {urls.map((u) => (
-        <a key={u} href={u} target="_blank" rel="noreferrer" className="tk-thumb tk-thumb-lg"><img src={u} alt="Print anexado" /></a>
+        <a key={u} href={apiUrl(u)} target="_blank" rel="noreferrer" className="tk-thumb tk-thumb-lg"><img src={apiUrl(u)} alt="Print anexado" /></a>
       ))}
     </div>
   )

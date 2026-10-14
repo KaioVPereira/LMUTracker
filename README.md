@@ -52,3 +52,32 @@ dotnet run --project LmuTracker.Worker -- report  # status do que foi guardado
 
 EF Core + SQL Server. Migrations em `LmuTracker.Infrastructure/Persistence/Migrations`; o Worker aplica
 no start (`MigrateAsync`).
+
+## App Android
+
+Mesmo esquema do Finanças e do Deu Quanto: Capacitor 8 com o front empacotado no APK (`frontend/android`,
+`com.gamestrackers.pitwall`), chamando a Api de produção pelo endereço completo (build `--mode mobile`). O app
+avisa sozinho quando sai versão nova; no navegador do Android o site sugere baixar o app; a página `/app` tem o
+download.
+
+```powershell
+cd frontend
+npm run apk        # build mobile + cap sync + gradlew assembleDebug
+npm run icons      # regera ícone e splash (scripts/make-icons.mjs)
+```
+
+O APK sai em `frontend/android/app/build/outputs/apk/debug/app-debug.apk`.
+
+### Publicar uma versão
+
+A versão mais nova fica na tabela `AppReleases`; o app compara com o próprio `versionCode` e mostra o aviso.
+
+1. Subir `versionCode` (inteiro, sempre maior) e `versionName` em `frontend/android/app/build.gradle`.
+2. `npm run apk` e copiar o APK para `apk/pitwall-X.Y.Z.apk`.
+3. `scp apk/pitwall-X.Y.Z.apk root@<vps>:/root/lmutracker-data/apk/`
+4. `ssh root@<vps> "cd /root/LMUTracker/deploy && docker compose exec worker dotnet LmuTracker.Worker.dll publish-release --version X.Y.Z --code N --file pitwall-X.Y.Z.apk --notes 'O que mudou'"`
+   (em `--notes`, `\n` vira quebra de linha).
+5. Conferir `https://lmutracker.gamestrackers.com/api/app/android`.
+
+No app, o vínculo com a Steam abre dentro do próprio app e volta para `https://localhost/vincular/retorno`
+(`Site:AppOrigin`), onde a sessão já está.

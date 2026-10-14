@@ -37,14 +37,14 @@ public sealed partial class SteamOpenIdService : ISteamLinkService
         _log = log;
     }
 
-    public string BuildLoginUrl()
+    public string BuildLoginUrl(bool fromApp = false)
     {
         var q = new Dictionary<string, string>
         {
             ["openid.ns"] = Ns,
             ["openid.mode"] = "checkid_setup",
-            ["openid.return_to"] = _site.SteamReturnUrl,
-            ["openid.realm"] = _site.Realm,
+            ["openid.return_to"] = fromApp ? _site.AppSteamReturnUrl : _site.SteamReturnUrl,
+            ["openid.realm"] = fromApp ? _site.AppRealm : _site.Realm,
             ["openid.identity"] = IdentifierSelect,
             ["openid.claimed_id"] = IdentifierSelect,
         };
@@ -62,7 +62,9 @@ public sealed partial class SteamOpenIdService : ISteamLinkService
             throw new AppException("O login na Steam foi cancelado ou não foi concluído.");
         if (Get("openid.op_endpoint") != Endpoint)
             throw new AppException("Resposta de login que não veio da Steam.");
-        if (!Get("openid.return_to").StartsWith(_site.SteamReturnUrl, StringComparison.Ordinal))
+        var returnTo = Get("openid.return_to");
+        if (!returnTo.StartsWith(_site.SteamReturnUrl, StringComparison.Ordinal)
+            && !returnTo.StartsWith(_site.AppSteamReturnUrl, StringComparison.Ordinal))
             throw new AppException("Resposta de login emitida para outro endereço.");
 
         var claimed = Get("openid.claimed_id");

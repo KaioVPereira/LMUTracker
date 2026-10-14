@@ -33,6 +33,49 @@ if (args.Contains("steam-login"))
     return;
 }
 
+// Registra uma versão do app Android (o APK já precisa estar em AppReleases:Directory) e sai. No servidor:
+//   docker compose exec worker dotnet LmuTracker.Worker.dll publish-release --version 1.0.0 --code 1 \
+//     --file pitwall-1.0.0.apk --notes "O que mudou"
+// Em --notes, "\n" vira quebra de linha. O app instalado avisa assim que a versão aparece em /api/app/android.
+if (args.Contains("publish-release"))
+{
+    string? Arg(string name) => Array.IndexOf(args, name) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
+    var version = Arg("--version");
+    var file = Arg("--file");
+    if (version is null || file is null || !int.TryParse(Arg("--code"), out var code) || code < 1)
+    {
+        Console.Error.WriteLine("Uso: publish-release --version 1.0.0 --code 1 --file pitwall-1.0.0.apk [--notes \"...\"]");
+        Environment.ExitCode = 1;
+        return;
+    }
+    var dir = builder.Configuration["AppReleases:Directory"] ?? "";
+    if (Path.GetFileName(file) != file || !File.Exists(Path.Combine(dir, file)))
+    {
+        Console.Error.WriteLine($"Arquivo não encontrado em '{dir}': {file}");
+        Environment.ExitCode = 1;
+        return;
+    }
+    using var hostR = builder.Build();
+    using var scopeR = hostR.Services.CreateScope();
+    var dbR = scopeR.ServiceProvider.GetRequiredService<AppDbContext>();
+    if (await dbR.AppReleases.AnyAsync(r => r.VersionCode >= code))
+    {
+        Console.Error.WriteLine($"Já existe versão com code >= {code}: o versionCode tem que crescer a cada publicação.");
+        Environment.ExitCode = 1;
+        return;
+    }
+    dbR.AppReleases.Add(new AppRelease
+    {
+        Version = version,
+        VersionCode = code,
+        FileName = file,
+        Notes = Arg("--notes")?.Replace("\\n", "\n"),
+    });
+    await dbR.SaveChangesAsync();
+    Console.WriteLine($"Publicada a versão {version} (code {code}).");
+    return;
+}
+
 // Conta incidentes e penalidades do resultado cru já guardado (sem falar com o RaceOS) e sai.
 if (args.Contains("backfill-incidents"))
 {

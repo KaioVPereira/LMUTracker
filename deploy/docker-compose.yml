@@ -25,9 +25,11 @@ services:
       RaceOs__SteamKit__Username: ${STEAM_USERNAME}
       RaceOs__SteamKit__SessionStorePath: /data/steam-session.json
       Scanner__IntervalSeconds: "120"
+      AppReleases__Directory: /app/data/apk   # comando publish-release (App Android)
     env_file: .env
     volumes:
       - steam-session:/data   # refresh token da conta de serviço (gerado pelo bootstrap steam-login)
+      - /root/lmutracker-data/apk:/app/data/apk:ro   # o publish-release confere se o APK existe
     networks:
       - gametracker
     restart: unless-stopped
@@ -45,8 +47,12 @@ services:
       Jwt__SecretFile: /data/jwt.key        # gerado na 1ª subida e guardado no volume
       Site__BaseUrl: https://lmutracker.gamestrackers.com
       Tickets__UploadsPath: /data/uploads   # prints dos chamados (no volume, sobrevive ao deploy)
+      # APKs do app Android. A versão liberada fica no banco (AppReleases); ver README → App Android.
+      AppReleases__Directory: /app/data/apk
     volumes:
       - api-data:/data
+      # Fora da pasta do repositório: o deploy faz `git reset --hard` lá.
+      - /root/lmutracker-data/apk:/app/data/apk:ro
     networks:
       - gametracker
     restart: unless-stopped

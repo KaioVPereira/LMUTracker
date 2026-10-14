@@ -7,19 +7,32 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "mobile:sync": "tsc -b && vite build --mode mobile && cap sync android",
+    "mobile:sync:dev": "tsc -b && vite build --mode mobiledev && cross-env CAP_DEV=1 cap sync android",
+    "apk": "npm run mobile:sync && cd android && .\\gradlew.bat assembleDebug",
+    "apk:dev": "npm run mobile:sync:dev && cd android && .\\gradlew.bat assembleDebug",
+    "apk:tunnel": "adb reverse tcp:5280 tcp:5280",
+    "icons": "node scripts/make-icons.mjs && capacitor-assets generate --android"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.5.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.4"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.5.3",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
+    "cross-env": "^10.1.0",
     "oxlint": "^1.81.0",
+    "sharp": "^0.35.5",
     "typescript": "~6.0.2",
     "vite": "^8.3.0"
   }

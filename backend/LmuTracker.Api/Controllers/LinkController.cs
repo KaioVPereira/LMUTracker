@@ -20,7 +20,7 @@ public class LinkController : ApiControllerBase
 
     /// <summary>URL do "Entrar com a Steam"; o front redireciona o navegador para ela.</summary>
     [HttpGet("steam/start")]
-    public ActionResult<SteamLinkStartDto> Start() => Ok(new SteamLinkStartDto(_steam.BuildLoginUrl()));
+    public ActionResult<SteamLinkStartDto> Start([FromQuery] bool app = false) => Ok(new SteamLinkStartDto(_steam.BuildLoginUrl(app)));
 
     /// <summary>Recebe os parâmetros openid.* da página de retorno e conclui o vínculo.</summary>
     [HttpPost("steam/verify")]

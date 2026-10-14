@@ -11,7 +11,8 @@ public record SteamLinkVerifyRequest(Dictionary<string, string> Params);
 public interface ISteamLinkService
 {
     /// <summary>URL do "Entrar com a Steam" que devolve o navegador para a página de retorno do site.</summary>
-    string BuildLoginUrl();
+    /// <param name="fromApp">true = volta para o app Android (https://localhost) em vez do site.</param>
+    string BuildLoginUrl(bool fromApp = false);
 
     /// <summary>Valida a resposta OpenID com a própria Steam e grava o SteamID no usuário.</summary>
     Task<UserDto> VerifyAndLinkAsync(Guid userId, IReadOnlyDictionary<string, string> parameters, CancellationToken ct = default);

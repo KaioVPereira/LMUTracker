@@ -1,5 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
+import { AppShell } from './components/AppShell'
 import { RequireAuth } from './components/RequireAuth'
+import { AppAndroidPage } from './pages/AppAndroidPage'
 import { CarPage } from './pages/CarPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { DriverPage } from './pages/DriverPage'
@@ -18,6 +20,8 @@ import { TrackPage } from './pages/TrackPage'
 // Leitura pública (como os perfis e resultados do próprio jogo); só o que é da conta exige login.
 export default function App() {
   return (
+    <>
+    <AppShell />
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/" element={<DashboardPage />} />
@@ -33,7 +37,9 @@ export default function App() {
       <Route path="/chamados" element={<RequireAuth><MyTicketsPage /></RequireAuth>} />
       <Route path="/admin/chamados" element={<RequireAuth><AdminTicketsPage /></RequireAuth>} />
       <Route path="/vincular/retorno" element={<RequireAuth><SteamReturnPage /></RequireAuth>} />
+      <Route path="/app" element={<AppAndroidPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   )
 }

@@ -1,5 +1,16 @@
 const TOKEN_KEY = 'pitwall.token'
-const BASE = import.meta.env.VITE_API_BASE ?? '/api'
+// No site a Api é o mesmo domínio (/api). No APK a página vem de https://localhost, então chama a Api pelo endereço
+// completo: produção no build "mobile", e a Api local do PC no "mobiledev" (o `adb reverse tcp:5280` faz o localhost
+// do celular chegar no PC).
+const BASE =
+  import.meta.env.MODE === 'mobile' ? 'https://lmutracker.gamestrackers.com/api'
+  : import.meta.env.MODE === 'mobiledev' ? 'http://localhost:5280/api'
+  : (import.meta.env.VITE_API_BASE ?? '/api')
+
+/** Endereço completo de um caminho da Api vindo do servidor (ex.: "/api/uploads/tickets/x.png"). No site fica igual. */
+export function apiUrl(path: string) {
+  return /^https?:/.test(path) ? path : BASE.replace(/\/api$/, '') + path
+}
 
 /** Disparado quando a Api responde 401 com um token salvo: a sessão expirou. */
 export const LOGOUT_EVENT = 'pitwall:logout'

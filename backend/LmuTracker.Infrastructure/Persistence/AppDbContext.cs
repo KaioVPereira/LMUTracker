@@ -16,6 +16,7 @@ public class AppDbContext : DbContext
     public DbSet<Ticket> Tickets => Set<Ticket>();
     public DbSet<TicketImage> TicketImages => Set<TicketImage>();
     public DbSet<TicketUpdate> TicketUpdates => Set<TicketUpdate>();
+    public DbSet<AppRelease> AppReleases => Set<AppRelease>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder b)
     {
@@ -72,6 +73,15 @@ public class AppDbContext : DbContext
         b.Entity<Follow>(e =>
         {
             e.HasIndex(x => new { x.UserId, x.DriverId }).IsUnique();
+        });
+
+        // ---------- App Android (versões liberadas) ----------
+        b.Entity<AppRelease>(e =>
+        {
+            e.HasIndex(r => r.VersionCode).IsUnique();
+            e.Property(r => r.Version).HasMaxLength(32);
+            e.Property(r => r.FileName).HasMaxLength(128);
+            e.Property(r => r.Notes).HasMaxLength(2000);
         });
 
         // ---------- Chamados (bugs e sugestões) ----------
