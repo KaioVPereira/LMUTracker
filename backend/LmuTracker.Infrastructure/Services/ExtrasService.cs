@@ -26,7 +26,7 @@ public sealed class ExtrasService : IExtrasService
     }
 
     /// <summary>Variantes do RaceOS contam como a mesma classe (LMP2 / LMP2_ELMS, GT3 / LMGT3).</summary>
-    private static IQueryable<RaceResult> OfClass(IQueryable<RaceResult> q, string? key) => (key ?? "").ToLowerInvariant() switch
+    internal static IQueryable<RaceResult> OfClass(IQueryable<RaceResult> q, string? key) => (key ?? "").ToLowerInvariant() switch
     {
         "" => q,
         "hyper" => q.Where(r => r.CarClass!.StartsWith("Hyper")),

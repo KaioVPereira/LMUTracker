@@ -17,10 +17,12 @@ public class LmuController : ApiControllerBase
     private readonly IHomeService _home;
     private readonly IDriverStatsService _stats;
     private readonly IExtrasService _extras;
+    private readonly IRankingsService _rankings;
 
     public LmuController(ILmuQueryService lmu, ISearchService search, IHomeService home, IDriverStatsService stats,
-        IExtrasService extras)
+        IExtrasService extras, IRankingsService rankings)
     {
+        _rankings = rankings;
         _lmu = lmu;
         _search = search;
         _home = home;
@@ -35,6 +37,24 @@ public class LmuController : ApiControllerBase
         [FromQuery] string? track, [FromQuery(Name = "class")] string? carClass, [FromQuery] string? car,
         [FromQuery] string? setup, [FromQuery] int take = 50, CancellationToken ct = default)
         => Ok(await _extras.LeaderboardAsync(track, carClass, car, setup, take, ct));
+
+    /// <summary>
+    /// Rankings de pilotos: dr | sr | wins | risers | clean | active, por classe e período (7d|30d|all).
+    /// <paramref name="me"/> = id do piloto a destacar (devolve a linha dele mesmo fora do topo).
+    /// </summary>
+    [HttpGet("rankings/drivers/{kind}")]
+    [OutputCache(Duration = 30)]
+    public async Task<ActionResult<RankingDto>> DriverRanking(
+        string kind, [FromQuery(Name = "class")] string? carClass, [FromQuery] string? period,
+        [FromQuery] Guid? me, [FromQuery] int take = 50, CancellationToken ct = default)
+        => await _rankings.DriversAsync(kind, carClass, period, take, me, ct) is { } r ? Ok(r) : NotFound();
+
+    /// <summary>Ranking de carros: vitórias na classe, taxa de vitória e pódios, por classe e período.</summary>
+    [HttpGet("rankings/cars")]
+    [OutputCache(Duration = 30)]
+    public async Task<ActionResult<CarRankingDto>> CarRanking(
+        [FromQuery(Name = "class")] string? carClass, [FromQuery] string? period, CancellationToken ct = default)
+        => Ok(await _rankings.CarsAsync(carClass, period, ct));
 
     /// <summary>Página da pista: recordes por classe, carros mais rápidos, números gerais.</summary>
     [HttpGet("tracks/{track}")]

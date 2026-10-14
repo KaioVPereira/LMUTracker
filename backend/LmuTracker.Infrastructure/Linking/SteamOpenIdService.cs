@@ -3,6 +3,7 @@ using LmuTracker.Application.Auth;
 using LmuTracker.Application.Common;
 using LmuTracker.Application.Linking;
 using LmuTracker.Infrastructure.Persistence;
+using LmuTracker.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -91,7 +92,7 @@ public sealed partial class SteamOpenIdService : ISteamLinkService
         await _db.SaveChangesAsync(ct);
 
         _log.LogInformation("Usuário {User} vinculou a Steam.", userId);
-        return ToDto(user);
+        return await UserDtoFactory.BuildAsync(_db, user, ct);
     }
 
     public async Task<UserDto> UnlinkAsync(Guid userId, CancellationToken ct = default)
@@ -104,7 +105,7 @@ public sealed partial class SteamOpenIdService : ISteamLinkService
         user.LinkedAt = null;
         user.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
-        return ToDto(user);
+        return await UserDtoFactory.BuildAsync(_db, user, ct);
     }
 
     private async Task<bool> CheckAuthenticationAsync(IReadOnlyDictionary<string, string> p, CancellationToken ct)
@@ -121,6 +122,4 @@ public sealed partial class SteamOpenIdService : ISteamLinkService
         return body.Split('\n').Any(l => l.Trim() == "is_valid:true");
     }
 
-    private static UserDto ToDto(Domain.Entities.User u) =>
-        new(u.Id, u.Username, u.DisplayName, u.Email, u.SteamId, u.LinkedAt, u.CreatedAt);
 }

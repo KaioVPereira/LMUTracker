@@ -64,7 +64,7 @@ export const badgeLabel = (b: string | null) => (b ? (BADGES[b] ?? b) : null)
 
 export const classLabel = (c: string | null) => (c ? c.replace(/_/g, ' ') : '—')
 
-const RANKS = ['bronze', 'silver', 'gold', 'platinum']
+const RANKS = ['bronze', 'silver', 'gold', 'platinum', 'diamond']
 export const rankClass = (r: string | null) => (r && RANKS.includes(r.toLowerCase()) ? `rk-${r.toLowerCase()}` : '')
 
 /** 0.72 -> "72%" */

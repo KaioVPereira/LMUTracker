@@ -48,7 +48,7 @@ public sealed class AuthService : IAuthService
         _db.Users.Add(user);
         await _db.SaveChangesAsync(ct);
 
-        return Issue(user);
+        return await IssueAsync(user, ct);
     }
 
     public async Task<AuthResponse> LoginAsync(LoginRequest request, CancellationToken ct = default)
@@ -62,21 +62,20 @@ public sealed class AuthService : IAuthService
         if (user is null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
             throw new AppException("Usuário ou senha inválidos.", 401);
 
-        return Issue(user);
+        return await IssueAsync(user, ct);
     }
 
     public async Task<UserDto?> GetMeAsync(Guid userId, CancellationToken ct = default)
     {
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
-        return user is null ? null : ToDto(user);
+        return user is null ? null : await ToDtoAsync(user, ct);
     }
 
-    private AuthResponse Issue(User user)
+    private async Task<AuthResponse> IssueAsync(User user, CancellationToken ct)
     {
         var (token, expires) = _tokens.CreateAccessToken(user);
-        return new AuthResponse(token, expires, ToDto(user));
+        return new AuthResponse(token, expires, await ToDtoAsync(user, ct));
     }
 
-    private static UserDto ToDto(User u) =>
-        new(u.Id, u.Username, u.DisplayName, u.Email, u.SteamId, u.LinkedAt, u.CreatedAt, u.IsSuperAdmin);
+    private Task<UserDto> ToDtoAsync(User u, CancellationToken ct) => UserDtoFactory.BuildAsync(_db, u, ct);
 }

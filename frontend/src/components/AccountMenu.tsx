@@ -1,8 +1,11 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
-import { initials } from '../lib/format'
+import { initials, rankClass } from '../lib/format'
 import { startSteamLink } from '../lib/steam'
+
+/** "Silver 2" -> "S2" (cabe na barra do celular; o título completo vai no title e no menu). */
+const shortRank = (title: string, tier: number | null) => `${title[0].toUpperCase()}${tier ?? ''}`
 
 /** Avatar no canto da barra: abre um menu com o perfil e sair (e vincular a Steam, enquanto não vinculou). */
 export function AccountMenu() {
@@ -24,6 +27,7 @@ export function AccountMenu() {
 
   if (!user) return null
   const close = () => setOpen(false)
+  const d = user.driver
 
   return (
     <div className="acct" ref={root}>
@@ -31,6 +35,18 @@ export function AccountMenu() {
         aria-controls={menuId} onClick={() => setOpen((o) => !o)}>
         <span className="ava" aria-hidden="true">{initials(user.displayName)}</span>
         <span className="name">{user.displayName}</span>
+        {d?.driverRankTitle && (
+          <span className="acct-ranks">
+            <span className={`acct-rank ${rankClass(d.driverRankTitle)}`} title={`Driver Rank: ${d.driverRankTitle} ${d.driverRankTier ?? ''}`}>
+              <small>DR</small>{shortRank(d.driverRankTitle, d.driverRankTier)}
+            </span>
+            {d.safetyRankTitle && (
+              <span className={`acct-rank acct-rank-sr ${rankClass(d.safetyRankTitle)}`} title={`Safety Rank: ${d.safetyRankTitle} ${d.safetyRankTier ?? ''}`}>
+                <small>SR</small>{shortRank(d.safetyRankTitle, d.safetyRankTier)}
+              </span>
+            )}
+          </span>
+        )}
         <svg aria-hidden="true" className="acct-caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="m6 9 6 6 6-6" /></svg>
         <span className="sr-only">Menu da conta</span>
       </button>
@@ -39,6 +55,12 @@ export function AccountMenu() {
           <div className="acct-head">
             <b>{user.displayName}</b>
             <span>{user.steamId ? 'Steam vinculada' : 'Steam não vinculada'}</span>
+            {d?.driverRankTitle && (
+              <span className="acct-head-ranks">
+                Driver Rank <b className={rankClass(d.driverRankTitle)}>{d.driverRankTitle} {d.driverRankTier}</b>
+                {d.safetyRankTitle && <> · Safety Rank <b className={rankClass(d.safetyRankTitle)}>{d.safetyRankTitle} {d.safetyRankTier}</b></>}
+              </span>
+            )}
           </div>
           <Link to="/perfil" role="menuitem" className="acct-item" onClick={close}>
             <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="8" r="4" /><path d="M4 21c1-4 4-6 8-6s7 2 8 6" /></svg>

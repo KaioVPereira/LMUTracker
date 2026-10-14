@@ -10,6 +10,18 @@ export interface UserDto {
   createdAt: string
   /** Dono da plataforma: vê e responde todos os chamados. */
   isSuperAdmin: boolean
+  /** Piloto da conta vinculada, com o último DR/SR visto (null = não vinculou ou ainda não correu). */
+  driver: UserDriver | null
+}
+
+export interface UserDriver {
+  driverId: string
+  driverRankTitle: string | null
+  driverRankTier: number | null
+  driverRankProgress: number | null
+  safetyRankTitle: string | null
+  safetyRankTier: number | null
+  safetyRankProgress: number | null
 }
 
 export interface AuthResponse {
@@ -688,4 +700,57 @@ export interface TicketListItem {
 export interface TicketDetail extends TicketListItem {
   images: string[]
   updates: TicketUpdate[]
+}
+
+// ---------- Rankings de pilotos e carros ----------
+export type DriverRankingKind = 'dr' | 'sr' | 'wins' | 'risers' | 'clean' | 'active'
+export type RankingPeriod = '7d' | '30d' | 'all'
+
+/** value = métrica da aba; extra = secundária (ver RankingRowDto na Api). */
+export interface RankingRow {
+  rank: number
+  driverId: string | null
+  name: string
+  nationality: string | null
+  driverRankTitle: string | null
+  driverRankTier: number | null
+  driverRankProgress: number | null
+  safetyRankTitle: string | null
+  safetyRankTier: number | null
+  safetyRankProgress: number | null
+  starts: number
+  wins: number
+  podiums: number
+  value: number
+  extra: number | null
+}
+
+export interface Ranking {
+  kind: DriverRankingKind
+  carClass: string | null
+  period: RankingPeriod
+  minStarts: number
+  total: number
+  rows: RankingRow[]
+  me: RankingRow | null
+}
+
+export interface CarRankingRow {
+  rank: number
+  car: string
+  carClass: string | null
+  starts: number
+  wins: number
+  podiums: number
+  drivers: number
+  winRate: number
+  avgClassFinish: number | null
+}
+
+export interface CarRanking {
+  carClass: string | null
+  period: RankingPeriod
+  minStarts: number
+  total: number
+  rows: CarRankingRow[]
 }
