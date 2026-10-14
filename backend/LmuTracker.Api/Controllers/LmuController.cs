@@ -39,7 +39,7 @@ public class LmuController : ApiControllerBase
         => Ok(await _extras.LeaderboardAsync(track, carClass, car, setup, take, ct));
 
     /// <summary>
-    /// Rankings de pilotos: dr | sr | wins | risers | clean | active, por classe e período (7d|30d|all).
+    /// Rankings de pilotos: dr | sr | wins | risers | clean | active | poles | gains, por classe e período (7d|30d|all).
     /// <paramref name="me"/> = id do piloto a destacar (devolve a linha dele mesmo fora do topo).
     /// </summary>
     [HttpGet("rankings/drivers/{kind}")]

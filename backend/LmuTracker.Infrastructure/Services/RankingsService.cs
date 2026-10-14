@@ -13,7 +13,7 @@ namespace LmuTracker.Infrastructure.Services;
 public sealed class RankingsService : IRankingsService
 {
     private const string FinishedNormally = "Finished Normally";
-    private static readonly TimeSpan CacheFor = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan CacheFor = TimeSpan.FromMinutes(2);
     private static readonly string[] Titles = { "Bronze", "Silver", "Gold", "Platinum", "Diamond" };
 
     /// <summary>Mínimo de corridas no período para entrar nas abas de média (mais limpos) e em alta.</summary>
@@ -36,7 +36,8 @@ public sealed class RankingsService : IRankingsService
 
     private sealed record PeriodStats(
         string SteamId, string Name, string? Nationality, int Starts, int Wins, int Podiums,
-        int IncidentStarts, int Incidents, int Penalties, int DrGain, int SrGain, int Laps);
+        int IncidentStarts, int Incidents, int Penalties, int DrGain, int SrGain, int Laps,
+        int Poles, int GainStarts, int PositionsGained);
 
     private static string NormPeriod(string? p) => p is "7d" or "30d" or "all" ? p : "30d";
 
@@ -78,7 +79,11 @@ public sealed class RankingsService : IRankingsService
                     g.Sum(r => r.Penalties ?? 0),
                     g.Sum(r => r.DriverRankAdjustment ?? 0),
                     g.Sum(r => r.SafetyRankAdjustment ?? 0),
-                    g.Sum(r => r.Laps)))
+                    g.Sum(r => r.Laps),
+                    g.Count(r => r.QualiClassPosition == 1),
+                    g.Count(r => r.FinishStatus == FinishedNormally && r.ClassGridPos != null && r.ClassPosition != null),
+                    g.Sum(r => r.FinishStatus == FinishedNormally && r.ClassGridPos != null && r.ClassPosition != null
+                        ? r.ClassGridPos!.Value - r.ClassPosition!.Value : 0)))
                 .ToListAsync(ct);
         }))!;
 
@@ -93,7 +98,7 @@ public sealed class RankingsService : IRankingsService
     public async Task<RankingDto?> DriversAsync(string kind, string? carClass, string? period, int take, Guid? me, CancellationToken ct = default)
     {
         kind = kind.ToLowerInvariant();
-        if (kind is not ("dr" or "sr" or "wins" or "risers" or "clean" or "active")) return null;
+        if (kind is not ("dr" or "sr" or "wins" or "risers" or "clean" or "active" or "poles" or "gains")) return null;
         period = NormPeriod(period);
         take = Math.Clamp(take, 1, 100);
         if (kind is "dr" or "sr") carClass = null; // rank é do piloto, não da classe
@@ -146,6 +151,19 @@ public sealed class RankingsService : IRankingsService
                     .Select(s => (s, Inc: (double)s.Incidents / s.IncidentStarts))
                     .OrderBy(x => x.Inc).ThenByDescending(x => x.s.IncidentStarts)
                     .Select(x => (x.s.SteamId, Math.Round(x.Inc, 2), (double?)Math.Round((double)x.s.Penalties / x.s.IncidentStarts, 2)))
+                    .ToList();
+                break;
+            case "poles":
+                ordered = stats.Where(s => s.Poles > 0)
+                    .OrderByDescending(s => s.Poles).ThenBy(s => s.Starts)
+                    .Select(s => (s.SteamId, (double)s.Poles, (double?)Math.Round((double)s.Poles / s.Starts, 3)))
+                    .ToList();
+                break;
+            case "gains":
+                minStarts = MinRiserStarts;
+                ordered = stats.Where(s => s.GainStarts >= MinRiserStarts)
+                    .OrderByDescending(s => s.PositionsGained).ThenBy(s => s.GainStarts)
+                    .Select(s => (s.SteamId, (double)s.PositionsGained, (double?)Math.Round((double)s.PositionsGained / s.GainStarts, 1)))
                     .ToList();
                 break;
             default: // active

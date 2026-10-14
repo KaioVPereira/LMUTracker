@@ -4,8 +4,9 @@ namespace LmuTracker.Application.Lmu;
 
 /// <summary>
 /// Uma linha de ranking de piloto. <see cref="Value"/> é a métrica da aba (DR/SR: pontuação; vitórias: vitórias;
-/// em alta: DR ganho; mais limpos: incidentes por corrida; mais ativos: corridas) e <see cref="Extra"/> a
-/// secundária (em alta: SR ganho; mais limpos: penalidades por corrida; mais ativos: voltas).
+/// em alta: DR ganho; mais limpos: incidentes por corrida; mais ativos: corridas; poles: poles; recuperação:
+/// posições ganhas) e <see cref="Extra"/> a secundária (vitórias e poles: taxa; em alta: SR ganho; mais limpos:
+/// penalidades por corrida; mais ativos: voltas; recuperação: posições ganhas por corrida).
 /// </summary>
 public record RankingRowDto(
     int Rank, Guid? DriverId, string Name, string? Nationality,
@@ -25,7 +26,7 @@ public record CarRankingDto(string? CarClass, string Period, int MinStarts, int 
 public interface IRankingsService
 {
     /// <summary>
-    /// kind: dr | sr | wins | risers | clean | active. period: 7d | 30d | all. carClass: hyper|lmp2|lmp3|gt3 (não vale
+    /// kind: dr | sr | wins | risers | clean | active | poles | gains. period: 7d | 30d | all. carClass: hyper|lmp2|lmp3|gt3 (não vale
     /// para dr/sr, que são do piloto). <paramref name="me"/>: id do piloto a destacar.
     /// </summary>
     Task<RankingDto?> DriversAsync(string kind, string? carClass, string? period, int take, Guid? me, CancellationToken ct = default);

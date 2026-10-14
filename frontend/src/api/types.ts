@@ -703,7 +703,7 @@ export interface TicketDetail extends TicketListItem {
 }
 
 // ---------- Rankings de pilotos e carros ----------
-export type DriverRankingKind = 'dr' | 'sr' | 'wins' | 'risers' | 'clean' | 'active'
+export type DriverRankingKind = 'dr' | 'sr' | 'wins' | 'risers' | 'clean' | 'active' | 'poles' | 'gains'
 export type RankingPeriod = '7d' | '30d' | 'all'
 
 /** value = métrica da aba; extra = secundária (ver RankingRowDto na Api). */

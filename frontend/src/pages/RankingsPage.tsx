@@ -11,13 +11,15 @@ import { useFollows } from '../lib/follows'
 import { fmtPct } from '../lib/format'
 import { useApi } from '../lib/useApi'
 
-type TabKey = 'voltas' | 'dr' | 'sr' | 'vitorias' | 'em-alta' | 'limpos' | 'ativos' | 'carros'
+type TabKey = 'voltas' | 'dr' | 'sr' | 'vitorias' | 'poles' | 'recuperacao' | 'em-alta' | 'limpos' | 'ativos' | 'carros'
 
 const TABS: { key: TabKey; label: string; kind?: DriverRankingKind; about: string }[] = [
   { key: 'voltas', label: 'Voltas mais rápidas', about: 'A melhor volta de cada piloto em corridas oficiais, por pista e classe. Setup fixo e livre são rankings separados.' },
   { key: 'dr', label: 'Driver Rank', kind: 'dr', about: 'Os pilotos com o Driver Rank mais alto, pelo último rank visto em corrida.' },
   { key: 'sr', label: 'Safety Rank', kind: 'sr', about: 'Os pilotos com o Safety Rank mais alto, pelo último rank visto em corrida.' },
   { key: 'vitorias', label: 'Vitórias', kind: 'wins', about: 'Quem mais venceu na classe (P1 do split), com pódios e aproveitamento.' },
+  { key: 'poles', label: 'Poles', kind: 'poles', about: 'Quem mais largou na frente: P1 da classe na classificação.' },
+  { key: 'recuperacao', label: 'Recuperação', kind: 'gains', about: 'Quem mais ganhou posições na classe, do grid à bandeira (só corridas terminadas).' },
   { key: 'em-alta', label: 'Em alta', kind: 'risers', about: 'Quem mais ganhou Driver Rank no período, somando o que o jogo reportou em cada corrida.' },
   { key: 'limpos', label: 'Mais limpos', kind: 'clean', about: 'Menos incidentes (contatos relatados pelo jogo) por corrida.' },
   { key: 'ativos', label: 'Mais ativos', kind: 'active', about: 'Quem mais correu no período.' },
@@ -173,6 +175,17 @@ function columnsFor(kind: DriverRankingKind): { h: string; num?: boolean; cell: 
       starts,
       { h: '% vitórias', num: true, cell: (r) => fmtPct(r.extra) },
       dr,
+    ]
+    case 'poles': return [
+      { h: 'Poles', num: true, cell: (r) => r.value.toLocaleString('pt-BR') },
+      starts,
+      { h: '% poles', num: true, cell: (r) => fmtPct(r.extra) },
+      wins, dr,
+    ]
+    case 'gains': return [
+      { h: 'Posições ganhas', num: true, cell: (r) => <span className={r.value < 0 ? 'down' : 'up'}>{signed(r.value)}</span> },
+      { h: 'Por corrida', num: true, cell: (r) => signed(r.extra === null ? null : Math.round(r.extra * 10) / 10) },
+      starts, dr,
     ]
     case 'risers': return [
       { h: 'DR ganho', num: true, cell: (r) => <span className="up">{signed(r.value)}</span> },
