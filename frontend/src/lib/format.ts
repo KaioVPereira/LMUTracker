@@ -62,6 +62,22 @@ const BADGES: Record<string, string> = {
 }
 export const badgeLabel = (b: string | null) => (b ? (BADGES[b] ?? b) : null)
 
+const BADGE_INFO: Record<string, string> = {
+  'sr-noob': 'Novo no Le Mans Ultimate',
+  'sr-rookie': 'Novo no Le Mans Ultimate',
+  'sr-probation': 'Voltando de um banimento',
+  'sr-warning': 'Se envolveu em muitos incidentes recentemente',
+  'sr-danger': 'Se envolveu em muitos incidentes recentemente',
+  'sr-clean': 'Poucos incidentes por corrida',
+  'sr-saint': 'Um dos pilotos mais seguros do serviço',
+  s397: 'Equipe do Studio 397',
+  'irl-driver': 'Piloto profissional validado',
+  'content-creator': 'Criador de conteúdo reconhecido',
+  'early-access': 'Jogador do acesso antecipado',
+  'test-driver': 'Piloto de testes do Le Mans Ultimate',
+}
+export const badgeDescription = (b: string) => BADGE_INFO[b] ?? null
+
 export const classLabel = (c: string | null) => (c ? c.replace(/_/g, ' ') : '—')
 
 const RANKS = ['bronze', 'silver', 'gold', 'platinum', 'diamond']

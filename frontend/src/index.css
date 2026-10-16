@@ -918,5 +918,7 @@ tr.rk-gap td { text-align: center; color: var(--faint); padding: 2px 0; }
 
 /* Bandeira do país do piloto (componente Flag). */
 .flag-wrap { display: inline-flex; align-items: center; gap: 6px; vertical-align: middle; margin-left: 8px; font-size: 13px; color: var(--soft); white-space: nowrap; }
+.badge-img { display: inline-block; vertical-align: middle; flex: none; }
+.badge-img + .flag-wrap, .flag-wrap + .badge-img { margin-left: 8px; }
 .flag { width: 21px; height: 14px; border-radius: 2px; object-fit: cover; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14); flex: none; }
 .more-row { display: flex; justify-content: center; margin: 12px 0 4px; }

@@ -8,9 +8,10 @@ import { ActivityHeatmap, RankChart } from '../components/ProfileCharts'
 import { FollowButton } from '../components/FollowButton'
 import { UnlinkSteamButton } from '../components/SteamLink'
 import { TopBar } from '../components/TopBar'
-import { badgeLabel, countryName, finishLabel, fmtDateTime, fmtDay, fmtInt, fmtLap, fmtRelative, rankClass } from '../lib/format'
+import { countryName, finishLabel, fmtDateTime, fmtDay, fmtInt, fmtLap, fmtRelative, rankClass } from '../lib/format'
 import { useApi } from '../lib/useApi'
 import { Flag } from '../components/Flag'
+import { Badge } from '../components/Badge'
 
 const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 100) : 0)
 const fmt1 = (v: number | null | undefined) => (v === null || v === undefined ? '—' : v.toLocaleString('pt-BR', { maximumFractionDigits: 1 }))
@@ -27,7 +28,6 @@ export function DriverPage() {
   if (!data) return <><TopBar /><div className="wrap"><ErrorBox message={error ?? 'Piloto não encontrado.'} /></div></>
 
   const d = data
-  const badge = badgeLabel(d.badge)
   const s = stats.data?.summary
 
   return (
@@ -43,7 +43,7 @@ export function DriverPage() {
             <span className="driver-sub">
               {d.isMe && <span className="pill me">Você</span>}
               <Flag code={d.nationality} withName />
-              {badge && <span className="pill">{badge}</span>}
+              <Badge name={d.badge} />
               <span>visto {fmtRelative(d.lastSeenAt)}</span>
             </span>
             <span className="chips">
