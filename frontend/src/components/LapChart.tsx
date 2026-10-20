@@ -43,12 +43,17 @@ export function LapChart({ laps }: { laps: Lap[] }) {
           <circle key={l.lap} cx={x(l.lap)} cy={y(l.lapTime!)} r={l === bestLap ? 4.5 : 2.2}
             className={l === bestLap ? 'dot best-dot' : 'dot'} />
         ))}
-        {laps.filter((l) => l.pit).map((l) => (
-          <g key={`pit-${l.lap}`}>
-            <line x1={x(l.lap)} x2={x(l.lap)} y1={PT} y2={H - PB} className="pitline" />
-            <text x={x(l.lap) + 3} y={PT + 10} className="axis pit-label">PIT</text>
-          </g>
-        ))}
+        {laps.filter((l) => l.pit).map((l) => {
+          const flip = x(l.lap) > W - PR - 70 // perto da borda direita o rótulo passa para a esquerda da linha
+          return (
+            <g key={`pit-${l.lap}`}>
+              <line x1={x(l.lap)} x2={x(l.lap)} y1={PT} y2={H - PB} className="pitline" />
+              <text x={x(l.lap) + (flip ? -3 : 3)} y={PT + 10} textAnchor={flip ? 'end' : 'start'} className="axis pit-label">
+                PIT · volta {l.lap}
+              </text>
+            </g>
+          )
+        })}
       </svg>
       </div>
       <figcaption className="note">

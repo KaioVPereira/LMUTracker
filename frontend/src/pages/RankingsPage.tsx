@@ -89,10 +89,11 @@ export function RankingsPage() {
   )
 }
 
-/** Filtro de país: lista os países com pilotos registrados (os com mais pilotos primeiro), nome em português. */
+/** Filtro de país: lista os países com pilotos registrados em ordem alfabética, nome em português. */
 function CountrySelect({ value, onPick }: { value: string; onPick: (code: string) => void }) {
   const countries = useApi<Country[]>('/lmu/rankings/countries')
-  const list = countries.data ?? []
+  // Ordem alfabética pelo nome em português (a API devolve por nº de pilotos); o nº segue entre parênteses.
+  const list = [...(countries.data ?? [])].sort((a, b) => countryName(a.code).localeCompare(countryName(b.code), 'pt-BR'))
   // Por link direto com um país que ainda não está na lista, ele continua aparecendo como escolhido.
   const known = !value || list.some((c) => c.code === value)
   return (
