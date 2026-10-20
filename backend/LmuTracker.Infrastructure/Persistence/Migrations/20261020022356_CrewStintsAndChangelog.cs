@@ -35,6 +35,7 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
                     EndLap = table.Column<int>(type: "int", nullable: false),
                     Name = table.Column<string>(type: "nvarchar(96)", maxLength: 96, nullable: false),
                     SteamId = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: true),
+                    BestLapTime = table.Column<double>(type: "float", nullable: true),
                     DriverRankAdjustment = table.Column<int>(type: "int", nullable: true),
                     SafetyRankAdjustment = table.Column<int>(type: "int", nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),

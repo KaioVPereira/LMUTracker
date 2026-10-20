@@ -1,6 +1,7 @@
-import { useMemo, useRef, useState, type MouseEvent } from 'react'
+import { useMemo, useRef, useState, type PointerEvent } from 'react'
 import type { RankPoint } from '../api/types'
 import { fmtDateTime, rankClass } from '../lib/format'
+import { ZoomBox } from './ZoomBox'
 
 // Gráficos do perfil, em SVG/HTML próprios (sem biblioteca). Regras: uma série por gráfico (sem legenda — o título
 // nomeia), linha de 2px, marcadores >= 8px, grade recessiva, tooltip ao passar o mouse/tocar, cor da série = acento.
@@ -57,7 +58,7 @@ export function RankChart({ points }: { points: RankPoint[] }) {
   const path = series.map((s, k) => `${k ? 'L' : 'M'}${x(k).toFixed(1)} ${y(s.score).toFixed(1)}`).join(' ')
   const area = `${path} L${x(series.length - 1).toFixed(1)} ${H - PB} L${x(0).toFixed(1)} ${H - PB} Z`
 
-  function onMove(e: MouseEvent<SVGRectElement>) {
+  function onMove(e: PointerEvent<SVGRectElement>) {
     const rect = (e.currentTarget.ownerSVGElement as SVGSVGElement).getBoundingClientRect()
     const px = ((e.clientX - rect.left) / rect.width) * W
     const k = Math.round(((px - PL) / (W - PL - PR)) * (series.length - 1))
@@ -76,6 +77,7 @@ export function RankChart({ points }: { points: RankPoint[] }) {
           {series.length} corridas · {delta >= 0 ? 'subiu' : 'caiu'} <b className={delta >= 0 ? 'up' : 'down'}>{Math.abs(delta)} pts</b> desde {fmtDateTime(first.p.at)}
         </span>
       </div>
+      <ZoomBox width={W}>
       <div className="chart-box" ref={box}>
         <svg viewBox={`0 0 ${W} ${H}`} role="img"
           aria-label={`${metric === 'dr' ? 'Driver Rank' : 'Safety Rank'}: de ${scoreLabel(first.score)} para ${scoreLabel(last.score)} em ${series.length} corridas`}>
@@ -95,7 +97,7 @@ export function RankChart({ points }: { points: RankPoint[] }) {
           <text x={PL} y={H - 8} className="axis">{fmtDateTime(first.p.at)}</text>
           <text x={W - PR} y={H - 8} textAnchor="end" className="axis">{fmtDateTime(last.p.at)}</text>
           <rect x={PL} y={PT} width={W - PL - PR} height={H - PT - PB} fill="transparent"
-            onMouseMove={onMove} onMouseLeave={() => setHover(null)} onTouchStart={() => setHover(series.length - 1)} />
+            onPointerMove={onMove} onPointerDown={onMove} onPointerLeave={(e) => { if (e.pointerType === 'mouse') setHover(null) }} />
         </svg>
         {h && (
           <div className="chart-tip" style={{ left: `${(x(hover!) / W) * 100}%`, top: `${(y(h.score) / H) * 100}%` }} role="status">
@@ -105,6 +107,7 @@ export function RankChart({ points }: { points: RankPoint[] }) {
           </div>
         )}
       </div>
+      </ZoomBox>
       <p className="note">Cada ponto é o rank com que ele largou naquela corrida (progresso arredondado de 10 em 10, como o RaceOS mostra).</p>
     </div>
   )

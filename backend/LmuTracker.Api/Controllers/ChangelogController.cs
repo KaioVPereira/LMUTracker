@@ -50,8 +50,16 @@ public class ChangelogController(AppDbContext db) : ApiControllerBase
             "Corridas de equipe corrigidas",
             "Nas corridas com troca de piloto (como as especiais de endurance), o resultado mostrava só quem terminou o carro. " +
             "Agora aparecem todos os pilotos do carro, com os turnos de cada um, e a corrida entra no perfil de todos eles — " +
-            "com a melhor volta e as voltas de cada um, não as do colega.",
+            "com a melhor volta e as voltas de cada um, não as do colega. Os rankings também: a vitória, o pódio e a pole " +
+            "contam para todos do carro, e no ranking de voltas e nos recordes cada um aparece com a volta que ele mesmo fez.",
             "fix", "/corridas?nivel=special", new DateTime(2026, 10, 20, 12, 15, 0, DateTimeKind.Utc)),
+
+        new("mobile-charts",
+            "Gráficos legíveis no celular",
+            "No celular os gráficos abrem no tamanho certo para ler, em vez de espremidos na largura da tela: arraste para " +
+            "os lados (e para baixo, nos mais altos) e use os botões − e + para afastar ou aproximar. Tocar no gráfico " +
+            "mostra os números daquele ponto.",
+            "improvement", "/corridas", new DateTime(2026, 10, 20, 12, 17, 0, DateTimeKind.Utc)),
 
         new("whats-new",
             "Central de Novidades",

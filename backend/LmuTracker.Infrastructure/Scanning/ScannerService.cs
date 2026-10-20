@@ -83,7 +83,7 @@ public sealed class ScannerService
         var ids = events.Select(e => e.Id).ToList();
         var rows = await _db.RaceResults
             .Where(r => ids.Contains(r.RaceSplit.ScanEventId) && r.ExtraData != null && !r.Crew.Any())
-            .Select(r => new { r.Id, r.Name, r.SteamId, r.ExtraData })
+            .Select(r => new { r.Id, r.Name, r.SteamId, r.ExtraData, r.LapsData })
             .ToListAsync(ct);
         var crews = rows.Select(r => (Row: r, Stints: CrewReader.FromStored(r.ExtraData)))
             .Where(x => x.Stints is not null).ToList();
@@ -99,14 +99,18 @@ public sealed class ScannerService
         }
 
         foreach (var (row, stints) in crews)
+        {
+            var laps = LapCodec.Decode(row.LapsData);
             foreach (var s in stints!)
                 _db.RaceCrewStints.Add(new RaceCrewStint
                 {
                     RaceResultId = row.Id, Seq = s.Seq, StartLap = s.StartLap, EndLap = s.EndLap,
                     Name = Cut(s.Name, RaceResult.NameMax)!,
+                    BestLapTime = StintBest(laps, s),
                     SteamId = s.Name.Equals(row.Name, StringComparison.OrdinalIgnoreCase) && row.SteamId is not null
                         ? row.SteamId : steamByName.GetValueOrDefault(s.Name),
                 });
+        }
         foreach (var e in events) e.CrewChecked = true;
         await _db.SaveChangesAsync(ct);
         if (crews.Count > 0)
@@ -604,6 +608,7 @@ public sealed class ScannerService
                     {
                         Seq = s.Seq, StartLap = s.StartLap, EndLap = s.EndLap,
                         Name = Cut(s.Name, RaceResult.NameMax)!,
+                        BestLapTime = StintBest(laps, s),
                         SteamId = m?.SteamId ?? (s.Name.Equals(row.Name, StringComparison.OrdinalIgnoreCase) ? row.SteamId : null),
                         DriverRankAdjustment = m?.DriverRankAdjustment,
                         SafetyRankAdjustment = m?.SafetyRankAdjustment,
@@ -648,6 +653,10 @@ public sealed class ScannerService
         }
         return laps;
     }
+
+    /// <summary>Melhor volta válida (sem pit) dentro de um turno de piloto.</summary>
+    private static double? StintBest(IEnumerable<Application.Lmu.LapDto> laps, CrewReader.Stint s) =>
+        laps.Where(l => l.Lap >= s.StartLap && l.Lap <= s.EndLap && !l.Pit && l.LapTime is > 0).Select(l => l.LapTime).Min();
 
     /// <summary>"GT3,Hyper" na ordem do site; classes desconhecidas vão no fim, em ordem alfabética.</summary>
     private static string? OrderClasses(IEnumerable<string> classes)

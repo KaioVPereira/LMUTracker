@@ -53,7 +53,7 @@ public sealed class HomeService : IHomeService
             .Select(r => new
             {
                 Track = r.RaceSplit.ScanEvent.Track!, r.CarClass, Fixed = (r.RaceSplit.ScanEvent.Title ?? "").Contains("Fixed"),
-                Lap = r.BestLapTime!.Value, r.SteamId, r.Name, r.Nationality, r.CarType, r.RaceSplit.ScanEvent.EventId,
+                Lap = r.BestLapTime!.Value, r.Id, r.SteamId, r.Name, r.Nationality, r.CarType, r.RaceSplit.ScanEvent.EventId,
                 SetAt = r.RaceSplit.ScanEvent.EventStartsAt ?? r.RaceSplit.ScanEvent.RaceStartsAt,
                 r.RaceSplit.SplitNo,
             })
@@ -66,6 +66,12 @@ public sealed class HomeService : IHomeService
                 .FirstOrDefault())
             .Where(c => c is not null)
             .Select(c => c!)
+            .ToList();
+        // Carro dividido: o recorde é de quem fez a volta, não de quem terminou o carro.
+        var lapOwners = await CrewCredit.LapOwnersAsync(db, records.Select(r => r.Id), ct);
+        records = records.Select(r => lapOwners.TryGetValue(r.Id, out var o) && o.SteamId != r.SteamId
+                ? r with { SteamId = o.SteamId, Name = o.Name, Nationality = null }
+                : r)
             .ToList();
 
         // ---------- vencedores do split 1, por classe ----------
@@ -112,15 +118,21 @@ public sealed class HomeService : IHomeService
         // ---------- maior saldo de DR na semana (mín. 3 corridas) ----------
         var weekly = results.Where(r => r.SteamId != null
                                         && (r.RaceSplit.ScanEvent.EventStartsAt ?? r.RaceSplit.ScanEvent.RaceStartsAt) >= weekAgo);
-        var climbersRaw = await weekly
-            .Where(r => r.DriverRankAdjustment != null)
-            .GroupBy(r => r.SteamId!)
-            .Where(g => g.Count() >= 3)
-            .Select(g => new { SteamId = g.Key, Gain = g.Sum(r => r.DriverRankAdjustment!.Value), Races = g.Count() })
-            .Where(x => x.Gain > 0)
+        // Carros divididos: quem guiou um turno sem ter terminado também conta (com o saldo de DR do turno dele).
+        var weekCrew = await CrewCredit.OfAsync(db, results.Where(r =>
+            (r.RaceSplit.ScanEvent.EventStartsAt ?? r.RaceSplit.ScanEvent.RaceStartsAt) >= weekAgo), includeOwner: false, ct);
+        var climbersRaw = (await weekly
+                .Where(r => r.DriverRankAdjustment != null)
+                .GroupBy(r => r.SteamId!)
+                .Select(g => new { SteamId = g.Key, Gain = g.Sum(r => r.DriverRankAdjustment!.Value), Races = g.Count() })
+                .ToListAsync(ct))
+            .Concat(weekCrew.Where(c => c.DrAdj is not null).Select(c => new { SteamId = c.SteamId, Gain = c.DrAdj!.Value, Races = 1 }))
+            .GroupBy(x => x.SteamId)
+            .Select(g => new { SteamId = g.Key, Gain = g.Sum(x => x.Gain), Races = g.Sum(x => x.Races) })
+            .Where(x => x.Races >= 3 && x.Gain > 0)
             .OrderByDescending(x => x.Gain).ThenByDescending(x => x.Races)
             .Take(5)
-            .ToListAsync(ct);
+            .ToList();
         var climberIds = climbersRaw.Select(c => c.SteamId).ToList();
         var climberHistory = (await weekly
                 .Where(r => climberIds.Contains(r.SteamId!))
@@ -135,13 +147,18 @@ public sealed class HomeService : IHomeService
 
         // ---------- mais ativos e largadas por classe (últimas 24 h) ----------
         var daily = results.Where(r => (r.RaceSplit.ScanEvent.EventStartsAt ?? r.RaceSplit.ScanEvent.RaceStartsAt) >= dayAgo);
-        var activeRaw = await daily
-            .Where(r => r.SteamId != null)
-            .GroupBy(r => r.SteamId!)
-            .Select(g => new { SteamId = g.Key, Races = g.Count(), Name = g.Max(r => r.Name), Nat = g.Max(r => r.Nationality) })
+        var dayCrew = weekCrew.Where(c => c.At >= dayAgo).ToList();
+        var activeRaw = (await daily
+                .Where(r => r.SteamId != null)
+                .GroupBy(r => r.SteamId!)
+                .Select(g => new { SteamId = g.Key, Races = g.Count(), Name = g.Max(r => r.Name), Nat = g.Max(r => r.Nationality) })
+                .ToListAsync(ct))
+            .Concat(dayCrew.Select(c => new { SteamId = c.SteamId, Races = 1, Name = (string?)c.Name, Nat = (string?)null }))
+            .GroupBy(x => x.SteamId)
+            .Select(g => new { SteamId = g.Key, Races = g.Sum(x => x.Races), Name = g.Max(x => x.Name), Nat = g.Max(x => x.Nat) })
             .OrderByDescending(x => x.Races)
             .Take(5)
-            .ToListAsync(ct);
+            .ToList();
         var share = (await daily
                 .Where(r => r.CarClass != null && r.CarClass != "")
                 .GroupBy(r => r.CarClass!)
@@ -160,15 +177,16 @@ public sealed class HomeService : IHomeService
             .Where(s => !string.IsNullOrEmpty(s))
             .Distinct()
             .ToList();
-        var ids = await db.Drivers.AsNoTracking()
+        var people = await db.Drivers.AsNoTracking()
             .Where(d => steamIds.Contains(d.SteamId))
-            .ToDictionaryAsync(d => d.SteamId, d => d.Id, ct);
-        Guid? Id(string? steam) => steam is not null && ids.TryGetValue(steam, out var id) ? id : null;
+            .ToDictionaryAsync(d => d.SteamId, d => new { d.Id, d.Nationality }, ct);
+        Guid? Id(string? steam) => steam is not null && people.TryGetValue(steam, out var p) ? p.Id : null;
+        string? Nat(string? steam) => steam is not null && people.TryGetValue(steam, out var p) ? p.Nationality : null;
 
         return new HomeDto(
             Records: records
                 .OrderByDescending(r => r.SetAt)
-                .Select(r => new LapRecordDto(r.Track, r.CarClass, r.Fixed, r.Lap, Id(r.SteamId), r.Name, r.Nationality,
+                .Select(r => new LapRecordDto(r.Track, r.CarClass, r.Fixed, r.Lap, Id(r.SteamId), r.Name, r.Nationality ?? Nat(r.SteamId),
                     r.CarType, r.EventId, r.SetAt, r.SplitNo))
                 .ToList(),
             Winners: winnersRaw
@@ -190,7 +208,7 @@ public sealed class HomeService : IHomeService
                 .Select(c => new CloseFinishDto(c.EventId, c.Title, c.Track, c.StartsAt, c.CarClass, c.Second!.Gap,
                     c.WinnerName, Id(c.WinnerSteam), c.Second.Name, Id(c.Second.SteamId)))
                 .ToList(),
-            MostActive: activeRaw.Select(a => new ActiveDriverDto(Id(a.SteamId), a.Name ?? "—", a.Nat, a.Races)).ToList(),
+            MostActive: activeRaw.Select(a => new ActiveDriverDto(Id(a.SteamId), a.Name ?? "—", a.Nat ?? Nat(a.SteamId), a.Races)).ToList(),
             ClassShare: share,
             GeneratedAt: now);
     }

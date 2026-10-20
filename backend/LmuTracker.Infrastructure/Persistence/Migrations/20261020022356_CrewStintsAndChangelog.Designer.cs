@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace LmuTracker.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20261020015628_CrewStintsAndChangelog")]
+    [Migration("20261020022356_CrewStintsAndChangelog")]
     partial class CrewStintsAndChangelog
     {
         /// <inheritdoc />
@@ -156,6 +156,9 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<double?>("BestLapTime")
+                        .HasColumnType("float");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");

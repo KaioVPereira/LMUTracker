@@ -1,7 +1,8 @@
-import { useMemo, useState, type MouseEvent } from 'react'
+import { useMemo, useState, type PointerEvent } from 'react'
 import type { SplitDriverLaps } from '../api/types'
 import { compoundClass, fmtLap } from '../lib/format'
 import { SERIES } from '../lib/series'
+import { ZoomBox } from './ZoomBox'
 
 // Gráficos da corrida, em SVG próprio. Até 6 pilotos destacados por vez (lib/series); os demais aparecem em cinza
 // ao fundo, como contexto. Cada destacado tem legenda e rótulo direto no fim da linha — a cor nunca é a única pista.
@@ -11,7 +12,7 @@ const W = 760, PL = 44, PR = 112, PT = 12, PB = 26
 /** Volta sob o cursor, de `minLap` (0 = largada, no gráfico de posições) até `maxLap`. */
 function useHoverLap(maxLap: number, minLap = 1) {
   const [lap, setLap] = useState<number | null>(null)
-  const onMove = (e: MouseEvent<SVGRectElement>) => {
+  const onMove = (e: PointerEvent<SVGRectElement>) => {
     const svg = e.currentTarget.ownerSVGElement as SVGSVGElement
     const rect = svg.getBoundingClientRect()
     const px = ((e.clientX - rect.left) / rect.width) * W
@@ -55,6 +56,7 @@ export function PositionChart({ drivers, selected, byClass }: { drivers: SplitDr
     .filter((t) => t.p !== null).sort((a, b) => a.p! - b.p!) : []
 
   return (
+    <ZoomBox width={W}>
     <div className="chart-box is-wide">
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Posição ${byClass ? 'na classe' : 'geral'} volta a volta`}>
         {ticks.map((t) => (
@@ -87,9 +89,9 @@ export function PositionChart({ drivers, selected, byClass }: { drivers: SplitDr
         {hover.lap !== null && <line x1={x(hover.lap)} x2={x(hover.lap)} y1={PT} y2={H - PB} className="cross" />}
         <line x1={x(0)} x2={x(0)} y1={PT} y2={H - PB} className="grid" />
         <text x={PL} y={H - 6} className="axis">largada</text>
-        {maxLap > 2 && <text x={x(1)} y={H - 6} textAnchor="middle" className="axis">1</text>}
+        {maxLap > 2 && x(1) - x(0) > 48 && <text x={x(1)} y={H - 6} textAnchor="middle" className="axis">1</text>}
         <text x={W - PR} y={H - 6} textAnchor="end" className="axis">volta {maxLap}</text>
-        <rect x={PL} y={PT} width={W - PL - PR} height={H - PT - PB} fill="transparent" onMouseMove={hover.onMove} onMouseLeave={hover.clear} />
+        <rect x={PL} y={PT} width={W - PL - PR} height={H - PT - PB} fill="transparent" onPointerMove={hover.onMove} onPointerDown={hover.onMove} onPointerLeave={(e) => { if (e.pointerType === 'mouse') hover.clear() }} />
       </svg>
       {hover.lap !== null && tip.length > 0 && (
         <div className="chart-tip" style={{ left: `${(x(hover.lap) / W) * 100}%`, top: '8%', transform: `translate(${hover.lap === 0 ? '0' : '-50%'}, 0)` }}>
@@ -103,6 +105,7 @@ export function PositionChart({ drivers, selected, byClass }: { drivers: SplitDr
         </div>
       )}
     </div>
+    </ZoomBox>
   )
 }
 
@@ -131,6 +134,7 @@ export function PaceChart({ drivers, selected }: { drivers: SplitDriverLaps[]; s
     .filter((t) => t.l).sort((a, b) => a.l!.lapTime! - b.l!.lapTime!) : []
 
   return (
+    <ZoomBox width={W}>
     <div className="chart-box is-wide">
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Tempo por volta dos pilotos destacados">
         {ticks.map((t) => (
@@ -155,7 +159,7 @@ export function PaceChart({ drivers, selected }: { drivers: SplitDriverLaps[]; s
         {hover.lap !== null && <line x1={x(hover.lap)} x2={x(hover.lap)} y1={PT} y2={H - PB} className="cross" />}
         <text x={PL + 14} y={H - 6} className="axis">volta 1</text>
         <text x={W - PR} y={H - 6} textAnchor="end" className="axis">volta {maxLap}</text>
-        <rect x={PL} y={PT} width={W - PL - PR} height={H - PT - PB} fill="transparent" onMouseMove={hover.onMove} onMouseLeave={hover.clear} />
+        <rect x={PL} y={PT} width={W - PL - PR} height={H - PT - PB} fill="transparent" onPointerMove={hover.onMove} onPointerDown={hover.onMove} onPointerLeave={(e) => { if (e.pointerType === 'mouse') hover.clear() }} />
       </svg>
       {hover.lap !== null && tip.length > 0 && (
         <div className="chart-tip" style={{ left: `${(x(hover.lap) / W) * 100}%`, top: '8%', transform: 'translate(-50%, 0)' }}>
@@ -166,6 +170,7 @@ export function PaceChart({ drivers, selected }: { drivers: SplitDriverLaps[]; s
         </div>
       )}
     </div>
+    </ZoomBox>
   )
 }
 
@@ -174,6 +179,7 @@ export function StrategyChart({ drivers, highlight }: { drivers: SplitDriverLaps
   const maxLap = Math.max(1, ...drivers.flatMap((d) => d.laps.map((l) => l.lap)))
   const compounds = new Set<string>()
   return (
+    <ZoomBox width={720}>
     <div className="strategy">
       {drivers.map((d) => {
         // Stints: sequências de voltas com o mesmo composto, cortadas nos pits.
@@ -204,5 +210,6 @@ export function StrategyChart({ drivers, highlight }: { drivers: SplitDriverLaps
         <span><b className="strat-pit legend" /> parada</span>
       </div>
     </div>
+    </ZoomBox>
   )
 }

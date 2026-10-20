@@ -23,6 +23,9 @@ public class RaceCrewStint : Entity
     /// <summary>SteamID do piloto do turno (casado pelo nome no array drivers do split). Null quando não deu para casar.</summary>
     public string? SteamId { get; set; }
 
+    /// <summary>Melhor volta válida (sem pit) dentro do turno — base dos rankings de volta e dos recordes.</summary>
+    public double? BestLapTime { get; set; }
+
     // Variação de rating do piloto do turno nesta corrida (do array drivers; null nas corridas preenchidas depois).
     public int? DriverRankAdjustment { get; set; }
     public int? SafetyRankAdjustment { get; set; }

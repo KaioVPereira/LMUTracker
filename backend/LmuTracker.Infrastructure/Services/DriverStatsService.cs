@@ -389,17 +389,29 @@ public sealed class DriverStatsService : IDriverStatsService
         {
             entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
             var cls = ClassKey(carClass);
-            var stats = await ExtrasService.OfClass(_db.RaceResults.AsNoTracking()
-                    .Where(r => r.SteamId != null && r.RaceSplit.ScanEvent.Track == track), cls)
-                .GroupBy(r => r.SteamId!)
-                .Select(g => new
+            var here = ExtrasService.OfClass(_db.RaceResults.AsNoTracking().Where(r => r.RaceSplit.ScanEvent.Track == track), cls);
+            // Carro dividido: a corrida conta para todos do carro, e a volta é a de cada um (a da linha é a do carro).
+            var crew = await CrewCredit.OfAsync(_db, here, includeOwner: true, ct);
+            var stats = (await here.Where(r => r.SteamId != null)
+                    .GroupBy(r => r.SteamId!)
+                    .Select(g => new
+                    {
+                        SteamId = g.Key,
+                        Starts = g.Count(),
+                        Wins = g.Count(r => r.ClassPosition == 1),
+                        Best = g.Where(r => !r.Crew.Any()).Min(r => r.BestLapTime),
+                    })
+                    .ToListAsync(ct))
+                .Concat(crew.Select(c => new
                 {
-                    SteamId = g.Key,
-                    Starts = g.Count(),
-                    Wins = g.Count(r => r.ClassPosition == 1),
-                    Best = g.Min(r => r.BestLapTime),
-                })
-                .ToListAsync(ct);
+                    SteamId = c.SteamId,
+                    Starts = c.IsOwner ? 0 : 1,
+                    Wins = !c.IsOwner && c.ClassPosition == 1 ? 1 : 0,
+                    Best = c.BestLap,
+                }))
+                .GroupBy(x => x.SteamId)
+                .Select(g => new { SteamId = g.Key, Starts = g.Sum(x => x.Starts), Wins = g.Sum(x => x.Wins), Best = g.Min(x => x.Best) })
+                .ToList();
             var wins = stats.Where(s => s.Wins > 0).OrderByDescending(s => s.Wins).ThenBy(s => s.Starts).Take(6).ToList();
             var fastest = stats.Where(s => s.Best is not null).OrderBy(s => s.Best).Take(6).ToList();
             var active = stats.OrderByDescending(s => s.Starts).Take(6).ToList();

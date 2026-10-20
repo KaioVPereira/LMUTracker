@@ -56,12 +56,12 @@ public sealed class RankingsService : IRankingsService
 
     /// <summary>Números de cada piloto no recorte (classe + período), numa consulta só.</summary>
     private Task<List<PeriodStats>> StatsAsync(string? carClass, string period, CancellationToken ct) =>
-        _cache.GetAsync($"rk:stats:{carClass}|{period}", CacheFor, (db, ct) =>
+        _cache.GetAsync($"rk:stats:{carClass}|{period}", CacheFor, async (db, ct) =>
         {
-            var q = ExtrasService.OfClass(db.RaceResults.AsNoTracking().Where(r => r.SteamId != null), carClass);
+            var all = ExtrasService.OfClass(db.RaceResults.AsNoTracking(), carClass);
             if (From(period) is { } from)
-                q = q.Where(r => (r.RaceSplit.ScanEvent.EventStartsAt ?? r.RaceSplit.ScanEvent.RaceStartsAt) >= from);
-            return q
+                all = all.Where(r => (r.RaceSplit.ScanEvent.EventStartsAt ?? r.RaceSplit.ScanEvent.RaceStartsAt) >= from);
+            var stats = await all.Where(r => r.SteamId != null)
                 .GroupBy(r => r.SteamId!)
                 .Select(g => new PeriodStats(
                     g.Key, g.Max(r => r.Name)!, g.Max(r => r.Nationality),
@@ -79,7 +79,48 @@ public sealed class RankingsService : IRankingsService
                     g.Sum(r => r.FinishStatus == FinishedNormally && r.ClassGridPos != null && r.ClassPosition != null
                         ? r.ClassGridPos!.Value - r.ClassPosition!.Value : 0)))
                 .ToListAsync(ct);
+            return WithCrew(stats, await CrewCredit.OfAsync(db, all, includeOwner: true, ct));
         }, ct);
+
+    /// <summary>
+    /// Carros divididos: o resultado do carro conta para todos os pilotos que guiaram um turno (vitória, pódio, pole,
+    /// posições ganhas), com as voltas e o saldo de DR/SR de cada um. Quem terminou já está na consulta agrupada (com
+    /// as voltas do carro inteiro) — só as voltas dele são acertadas; os contatos seguem com quem terminou, que é o
+    /// nome a que o jogo atribui os incidentes do carro.
+    /// </summary>
+    private static List<PeriodStats> WithCrew(List<PeriodStats> stats, List<CrewCredit.Credit> credits)
+    {
+        if (credits.Count == 0) return stats;
+        var by = stats.ToDictionary(s => s.SteamId);
+        // Voltas do carro inteiro que foram de outros pilotos, por resultado.
+        var carLaps = credits.GroupBy(c => c.ResultId).ToDictionary(g => g.Key, g => g.Sum(c => c.Laps));
+        foreach (var c in credits)
+        {
+            if (c.IsOwner)
+            {
+                // O dono da linha já foi contado; tira as voltas dos colegas.
+                if (by.TryGetValue(c.SteamId, out var o))
+                    by[c.SteamId] = o with { Laps = Math.Max(0, o.Laps - (carLaps[c.ResultId] - c.Laps)) };
+                continue;
+            }
+            var finished = c.FinishStatus == FinishedNormally;
+            var gain = finished && c.ClassGridPos is not null && c.ClassPosition is not null;
+            var s = by.GetValueOrDefault(c.SteamId) ?? new PeriodStats(c.SteamId, c.Name, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+            by[c.SteamId] = s with
+            {
+                Starts = s.Starts + 1,
+                Wins = s.Wins + (finished && c.ClassPosition == 1 ? 1 : 0),
+                Podiums = s.Podiums + (finished && c.ClassPosition is >= 1 and <= 3 ? 1 : 0),
+                DrGain = s.DrGain + (c.DrAdj ?? 0),
+                SrGain = s.SrGain + (c.SrAdj ?? 0),
+                Laps = s.Laps + c.Laps,
+                Poles = s.Poles + (c.QualiClassPosition == 1 ? 1 : 0),
+                GainStarts = s.GainStarts + (gain ? 1 : 0),
+                PositionsGained = s.PositionsGained + (gain ? c.ClassGridPos!.Value - c.ClassPosition!.Value : 0),
+            };
+        }
+        return by.Values.ToList();
+    }
 
     private static int TitleIndex(string? t) => Array.FindIndex(Titles, x => x.Equals(t, StringComparison.OrdinalIgnoreCase));
 

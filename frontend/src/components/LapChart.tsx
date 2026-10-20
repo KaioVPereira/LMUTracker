@@ -1,5 +1,6 @@
 import type { CrewStint, Lap } from '../api/types'
 import { fmtLap } from '../lib/format'
+import { ZoomBox } from './ZoomBox'
 
 /**
  * Tempo por volta. Voltas de pit e a primeira (largada) ficam fora da escala — senão um pit de +25s achata o
@@ -28,7 +29,7 @@ export function LapChart({ laps, crew }: { laps: Lap[]; crew?: CrewStint[] | nul
 
   return (
     <figure className="chart">
-      <div className="chart-scroll">
+      <ZoomBox width={W}>
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Tempo por volta">
         {ticks.map((t) => (
           <g key={t}>
@@ -62,7 +63,7 @@ export function LapChart({ laps, crew }: { laps: Lap[]; crew?: CrewStint[] | nul
           </g>
         ))}
       </svg>
-      </div>
+      </ZoomBox>
       <figcaption className="note">
         Melhor volta: <b className="mono">{fmtLap(best)}</b> (volta {bestLap.lap}). Pit e 1ª volta fora da escala.
       </figcaption>

@@ -56,14 +56,34 @@ public sealed class ExtrasService : IExtrasService
 
     private sealed record LapEntry(string SteamId, double Lap);
 
+    /// <summary>Resultados do recorte. Carro dividido fica de fora: a volta dele vem dos turnos (ver CrewLapsAsync).</summary>
     private static IQueryable<RaceResult> LapsOf(AppDbContext db, string? track, string? carClass, string? car, string? setup,
         string? country)
     {
-        var q = db.RaceResults.AsNoTracking().Where(r => r.BestLapTime != null && r.SteamId != null);
+        var q = Cut(db, track, carClass, car, setup).Where(r => r.BestLapTime != null && r.SteamId != null && !r.Crew.Any());
+        if (country is not null) q = q.Where(r => r.Nationality == country);
+        return q;
+    }
+
+    private static IQueryable<RaceResult> Cut(AppDbContext db, string? track, string? carClass, string? car, string? setup)
+    {
+        var q = db.RaceResults.AsNoTracking();
         if (!string.IsNullOrWhiteSpace(track)) q = q.Where(r => r.RaceSplit.ScanEvent.Track == track);
         if (!string.IsNullOrWhiteSpace(car)) q = q.Where(r => r.CarType == car);
-        if (country is not null) q = q.Where(r => r.Nationality == country);
         return OfSetup(OfClass(q, carClass), setup);
+    }
+
+    /// <summary>A melhor volta de cada piloto em cada carro dividido do recorte (a dos turnos dele), com o país.</summary>
+    private static async Task<List<(CrewCredit.Credit C, string? Nationality)>> CrewLapsAsync(AppDbContext db, string? track,
+        string? carClass, string? car, string? setup, string? country, CancellationToken ct)
+    {
+        var credits = (await CrewCredit.OfAsync(db, Cut(db, track, carClass, car, setup).Where(r => r.Crew.Any()), true, ct))
+            .Where(c => c.BestLap is not null).ToList();
+        var steam = credits.Select(c => c.SteamId).Distinct().ToList();
+        var nat = await db.Drivers.AsNoTracking().Where(d => steam.Contains(d.SteamId))
+            .ToDictionaryAsync(d => d.SteamId, d => d.Nationality, ct);
+        return credits.Select(c => (c, nat.GetValueOrDefault(c.SteamId)))
+            .Where(x => country is null || x.Item2 == country).ToList();
     }
 
     public async Task<LeaderboardDto> LeaderboardAsync(string? track, string? carClass, string? car, string? setup, string? country,
@@ -78,13 +98,20 @@ public sealed class ExtrasService : IExtrasService
         // 1) A melhor volta de cada piloto no recorte, já ordenada (GroupBy + Min traduz para SQL) — a lista inteira
         // fica em cache, então trocar de página não volta a agregar; 2) os detalhes da corrida em que cada piloto
         // da página fez essa volta.
-        var order = await _cache.GetAsync($"lb:order:{filters}", LeaderboardFor, (db, ct) =>
-            LapsOf(db, track, carClass, car, setup, country)
+        // Carros divididos entram pelos turnos: cada piloto com a melhor volta que ele mesmo fez.
+        var crew = await _cache.GetAsync($"lb:crew:{filters}", LeaderboardFor, (db, ct) =>
+            CrewLapsAsync(db, track, carClass, car, setup, country, ct), ct);
+        var order = await _cache.GetAsync($"lb:order:{filters}", LeaderboardFor, async (db, ct) =>
+            (await LapsOf(db, track, carClass, car, setup, country)
                 .GroupBy(r => r.SteamId!)
                 .Select(g => new { SteamId = g.Key, Lap = g.Min(r => r.BestLapTime!.Value) })
-                .OrderBy(x => x.Lap).ThenBy(x => x.SteamId)
-                .Select(x => new LapEntry(x.SteamId, x.Lap))
-                .ToListAsync(ct), ct);
+                .ToListAsync(ct))
+            .Select(x => new LapEntry(x.SteamId, x.Lap))
+            .Concat(crew.Select(x => new LapEntry(x.C.SteamId, x.C.BestLap!.Value)))
+            .GroupBy(x => x.SteamId)
+            .Select(g => new LapEntry(g.Key, g.Min(x => x.Lap)))
+            .OrderBy(x => x.Lap).ThenBy(x => x.SteamId, StringComparer.Ordinal)
+            .ToList(), ct);
 
         return await _cache.GetAsync($"lb:{filters}|{skip}|{take}", LeaderboardFor, async (db, ct) =>
         {
@@ -99,6 +126,11 @@ public sealed class ExtrasService : IExtrasService
                         At = r.RaceSplit.ScanEvent.EventStartsAt ?? r.RaceSplit.ScanEvent.RaceStartsAt,
                     })
                     .ToListAsync(ct))
+                .Concat(crew.Where(x => pageIds.Contains(x.C.SteamId)).Select(x => new
+                {
+                    SteamId = (string?)x.C.SteamId, Name = x.C.Name, Nationality = x.Nationality, CarType = x.C.CarType,
+                    CarClass = x.C.CarClass, Lap = x.C.BestLap!.Value, EventId = x.C.EventId, SplitNo = x.C.SplitNo, At = x.C.At,
+                }))
                 .GroupBy(x => x.SteamId!)
                 .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Lap).ThenBy(x => x.At).First());
             var ids = await DriverIdsAsync(db, pageIds, ct);
@@ -137,7 +169,7 @@ public sealed class ExtrasService : IExtrasService
                 .GroupBy(r => new { r.CarClass, Fixed = (r.RaceSplit.ScanEvent.Title ?? "").Contains("Fixed") })
                 .Select(g => g.OrderBy(r => r.BestLapTime).Select(r => new
                 {
-                    g.Key.CarClass, g.Key.Fixed, Lap = r.BestLapTime!.Value, r.SteamId, r.Name, r.CarType,
+                    g.Key.CarClass, g.Key.Fixed, Lap = r.BestLapTime!.Value, r.Id, r.SteamId, r.Name, r.CarType,
                     At = r.RaceSplit.ScanEvent.EventStartsAt ?? r.RaceSplit.ScanEvent.RaceStartsAt, r.RaceSplit.ScanEvent.EventId,
                 }).First())
                 .ToListAsync(ct);
@@ -165,6 +197,9 @@ public sealed class ExtrasService : IExtrasService
                     .GroupBy(r => r.CarClass!).Select(g => new { g.Key, N = g.Count() }).ToListAsync(ct))
                 .OrderByDescending(x => x.N).Select(x => new ClassShareDto(x.Key, x.N)).ToList();
 
+            // Carro dividido: o recorde é de quem fez a volta, não de quem terminou o carro.
+            var owners = await CrewCredit.LapOwnersAsync(db, records.Select(r => r.Id), ct);
+            records = records.Select(r => owners.TryGetValue(r.Id, out var o) ? r with { SteamId = o.SteamId, Name = o.Name } : r).ToList();
             var ids = await DriverIdsAsync(db, records.Select(r => r.SteamId), ct);
             return new TrackDetailDto(track, races, starts, drivers, first, last,
                 records.OrderBy(r => r.CarClass).ThenBy(r => r.Fixed)
@@ -200,21 +235,39 @@ public sealed class ExtrasService : IExtrasService
                     Starts = g.Count(),
                     Wins = g.Count(r => r.ClassPosition == 1),
                     Best = g.Where(r => r.BestLapTime != null).OrderBy(r => r.BestLapTime)
-                        .Select(r => new { Lap = r.BestLapTime, r.SteamId, r.Name }).FirstOrDefault(),
+                        .Select(r => new { Lap = r.BestLapTime, r.Id, r.SteamId, r.Name }).FirstOrDefault(),
                 })
                 .ToListAsync(ct);
 
-            var top = await results.Where(r => r.SteamId != null)
+            var perDriver = await results.Where(r => r.SteamId != null)
                 .GroupBy(r => r.SteamId!)
                 .Select(g => new
                 {
                     SteamId = g.Key, Name = g.Max(r => r.Name), Nat = g.Max(r => r.Nationality), Starts = g.Count(),
                     Wins = g.Count(r => r.ClassPosition == 1), Podiums = g.Count(r => r.ClassPosition >= 1 && r.ClassPosition <= 3),
                 })
+                .ToListAsync(ct);
+            // Carros divididos: o resultado conta também para quem guiou um turno sem ter terminado.
+            var credits = await CrewCredit.OfAsync(db, results, includeOwner: false, ct);
+            var top = perDriver
+                .Concat(credits.Select(c => new
+                {
+                    SteamId = c.SteamId, Name = (string?)c.Name, Nat = (string?)null, Starts = 1,
+                    Wins = c.ClassPosition == 1 ? 1 : 0, Podiums = c.ClassPosition is >= 1 and <= 3 ? 1 : 0,
+                }))
+                .GroupBy(x => x.SteamId)
+                .Select(g => new
+                {
+                    SteamId = g.Key, Name = g.Max(x => x.Name), Nat = g.Max(x => x.Nat), Starts = g.Sum(x => x.Starts),
+                    Wins = g.Sum(x => x.Wins), Podiums = g.Sum(x => x.Podiums),
+                })
                 .OrderByDescending(x => x.Wins).ThenByDescending(x => x.Podiums).ThenByDescending(x => x.Starts)
                 .Take(10)
-                .ToListAsync(ct);
+                .ToList();
 
+            var owners = await CrewCredit.LapOwnersAsync(db, tracks.Where(t => t.Best is not null).Select(t => t.Best!.Id), ct);
+            tracks = tracks.Select(t => t.Best is not null && owners.TryGetValue(t.Best.Id, out var o)
+                ? t with { Best = t.Best with { SteamId = o.SteamId, Name = o.Name } } : t).ToList();
             var ids = await DriverIdsAsync(db, tracks.Select(t => t.Best?.SteamId).Concat(top.Select(t => t.SteamId)), ct);
             Guid? Id(string? s) => s is not null && ids.TryGetValue(s, out var id) ? id : null;
             return new CarDetailDto(car, stats.Class, stats.Starts, drivers, stats.Wins, stats.Podiums, stats.Dnfs,

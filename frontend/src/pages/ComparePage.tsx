@@ -7,6 +7,7 @@ import type {
 import { EmptyState, ErrorBox, Loading, Rank } from '../components/Bits'
 import { Flag } from '../components/Flag'
 import { TopBar } from '../components/TopBar'
+import { ZoomBox } from '../components/ZoomBox'
 import { classKey, classShort } from '../lib/classes'
 import { countryName, finishLabel, fmtDay, fmtDayShort, fmtLap } from '../lib/format'
 import { SERIES } from '../lib/series'
@@ -357,7 +358,8 @@ function LapTrend({ me, them }: { me: CompareSide; them: CompareSide }) {
   const ticks = [lo, (lo + hi) / 2, hi]
   return (
     <>
-      <div className="chart-box is-wide cmp-trend">
+      <ZoomBox width={W}>
+      <div className="chart-box is-wide">
         <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Melhor volta de cada corrida dos dois pilotos">
           {ticks.map((t) => (
             <g key={t}>
@@ -382,6 +384,7 @@ function LapTrend({ me, them }: { me: CompareSide; them: CompareSide }) {
           <text x={W - PR} y={H - 6} textAnchor="end" className="axis">{fmtDayShort(new Date(t1).toISOString())}</text>
         </svg>
       </div>
+      </ZoomBox>
       <div className="strat-legend">
         {series.map(({ s, color }) => <span key={s.driverId}><i className="sw" style={{ background: color, borderColor: 'transparent' }} />{s.name}</span>)}
         <span>mais alto = mais rápido</span>
