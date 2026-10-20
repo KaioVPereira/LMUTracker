@@ -68,6 +68,12 @@ public class ScanEvent : Entity
     /// </summary>
     public int DetailVersion { get; set; }
 
+    /// <summary>
+    /// Os revezamentos de piloto (carros divididos) já foram lidos para esta corrida. O download novo já lê; as
+    /// corridas antigas são lidas aos poucos do resultado cru guardado (ScannerService.BackfillCrewAsync).
+    /// </summary>
+    public bool CrewChecked { get; set; }
+
     /// <summary>Classes que correram (ex.: "Hyper,GT3"), na ordem fixa do site — base dos filtros por classe.</summary>
     public string? Classes { get; set; }
 

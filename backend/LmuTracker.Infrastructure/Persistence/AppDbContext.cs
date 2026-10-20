@@ -11,6 +11,7 @@ public class AppDbContext : DbContext
     public DbSet<ScanEvent> ScanEvents => Set<ScanEvent>();
     public DbSet<RaceSplit> RaceSplits => Set<RaceSplit>();
     public DbSet<RaceResult> RaceResults => Set<RaceResult>();
+    public DbSet<RaceCrewStint> RaceCrewStints => Set<RaceCrewStint>();
     public DbSet<Driver> Drivers => Set<Driver>();
     public DbSet<Follow> Follows => Set<Follow>();
     public DbSet<Ticket> Tickets => Set<Ticket>();
@@ -82,6 +83,16 @@ public class AppDbContext : DbContext
             e.Property(x => x.FinishStatus).HasMaxLength(RaceResult.FinishStatusMax);
             e.Property(x => x.DriverRankTitle).HasMaxLength(RaceResult.RankTitleMax);
             e.Property(x => x.SafetyRankTitle).HasMaxLength(RaceResult.RankTitleMax);
+        });
+
+        b.Entity<RaceCrewStint>(e =>
+        {
+            e.ToTable("RaceCrewStints");
+            e.HasIndex(x => x.SteamId).IncludeProperties(x => x.RaceResultId); // corridas de equipe no perfil
+            e.Property(x => x.SteamId).HasMaxLength(20);
+            e.Property(x => x.Name).HasMaxLength(RaceResult.NameMax);
+            e.HasOne(x => x.RaceResult).WithMany(r => r.Crew)
+                .HasForeignKey(x => x.RaceResultId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<Follow>(e =>

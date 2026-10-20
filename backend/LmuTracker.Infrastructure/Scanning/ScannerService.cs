@@ -63,6 +63,55 @@ public sealed class ScannerService
         await DiscoverAsync(ct);
         await FetchDueAsync(ct);
         await BackfillIncidentsAsync(ct);
+        await BackfillCrewAsync(ct);
+    }
+
+    /// <summary>
+    /// Revezamentos das corridas baixadas antes de o scanner ler os "swaps": saem do JSON cru de cada linha, já
+    /// guardado. O array drivers não foi guardado, então o SteamID do turno vem do índice de pilotos pelo nome
+    /// (só quando o nome é único) e o saldo de DR/SR do turno fica vazio. Umas corridas por passada.
+    /// </summary>
+    public async Task<int> BackfillCrewAsync(CancellationToken ct)
+    {
+        var events = await _db.ScanEvents
+            .Where(e => !e.CrewChecked && e.Status == ScanEventStatus.Fetched)
+            .OrderByDescending(e => e.EventStartsAt ?? e.RaceStartsAt)
+            .Take(100)
+            .ToListAsync(ct);
+        if (events.Count == 0) return 0;
+
+        var ids = events.Select(e => e.Id).ToList();
+        var rows = await _db.RaceResults
+            .Where(r => ids.Contains(r.RaceSplit.ScanEventId) && r.ExtraData != null && !r.Crew.Any())
+            .Select(r => new { r.Id, r.Name, r.SteamId, r.ExtraData })
+            .ToListAsync(ct);
+        var crews = rows.Select(r => (Row: r, Stints: CrewReader.FromStored(r.ExtraData)))
+            .Where(x => x.Stints is not null).ToList();
+
+        var names = crews.SelectMany(x => x.Stints!.Select(s => s.Name)).Distinct().ToList();
+        var steamByName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var chunk in names.Chunk(500))
+        {
+            var found = await _db.Drivers.AsNoTracking().Where(d => chunk.Contains(d.Name))
+                .Select(d => new { d.Name, d.SteamId }).ToListAsync(ct);
+            foreach (var g in found.GroupBy(d => d.Name, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() == 1))
+                steamByName[g.Key] = g.First().SteamId;
+        }
+
+        foreach (var (row, stints) in crews)
+            foreach (var s in stints!)
+                _db.RaceCrewStints.Add(new RaceCrewStint
+                {
+                    RaceResultId = row.Id, Seq = s.Seq, StartLap = s.StartLap, EndLap = s.EndLap,
+                    Name = Cut(s.Name, RaceResult.NameMax)!,
+                    SteamId = s.Name.Equals(row.Name, StringComparison.OrdinalIgnoreCase) && row.SteamId is not null
+                        ? row.SteamId : steamByName.GetValueOrDefault(s.Name),
+                });
+        foreach (var e in events) e.CrewChecked = true;
+        await _db.SaveChangesAsync(ct);
+        if (crews.Count > 0)
+            _log.LogInformation("Scanner: revezamentos lidos em {Cars} carros de {Events} corridas já guardadas.", crews.Count, events.Count);
+        return events.Count;
     }
 
     /// <summary>
@@ -476,6 +525,12 @@ public sealed class ScannerService
                 .Where(d => !string.IsNullOrEmpty(d.SteamId))
                 .GroupBy(d => d.SteamId!)
                 .ToDictionary(g => g.Key, g => g.First());
+            // Nomes repetidos no split ficam de fora: casar o turno com o piloto errado é pior que não casar.
+            var byName = result.Drivers
+                .Where(d => !string.IsNullOrEmpty(d.SteamId) && !string.IsNullOrWhiteSpace(d.Name))
+                .GroupBy(d => d.Name!.Trim(), StringComparer.OrdinalIgnoreCase)
+                .Where(g => g.Select(d => d.SteamId).Distinct().Count() == 1)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
             var rows = result.Race?.Races.FirstOrDefault();
             split.MostLapsCompleted = rows?.MostLapsCompleted ?? 0;
@@ -499,7 +554,7 @@ public sealed class ScannerService
                 var laps = ToLaps(r.LapList);
                 if (!string.IsNullOrWhiteSpace(r.CarClass)) classes.Add(r.CarClass);
                 var rowExtra = JsonBlob.Keep(r.Extra);
-                split.Results.Add(new RaceResult
+                var row = new RaceResult
                 {
                     DriverRankTitle = Cut(meta?.DriverRank?.Rank, RaceResult.RankTitleMax),
                     DriverRankTier = meta?.DriverRank?.Tier,
@@ -538,7 +593,23 @@ public sealed class ScannerService
                     DriverRankAdjustment = meta?.DriverRankAdjustment,
                     SafetyRankAdjustment = meta?.SafetyRankAdjustment,
                     JokerPlayed = meta?.JokerPlayed ?? false,
-                });
+                };
+                // Carro dividido: cada turno com o SteamID e o saldo de DR/SR do piloto, casados pelo nome no
+                // array drivers do split (os turnos só trazem o nome).
+                foreach (var s in CrewReader.FromRowExtra(r.Extra) ?? [])
+                {
+                    var m = s.Name.Equals(row.Name, StringComparison.OrdinalIgnoreCase) && row.SteamId is not null
+                        ? meta : byName.GetValueOrDefault(s.Name);
+                    row.Crew.Add(new RaceCrewStint
+                    {
+                        Seq = s.Seq, StartLap = s.StartLap, EndLap = s.EndLap,
+                        Name = Cut(s.Name, RaceResult.NameMax)!,
+                        SteamId = m?.SteamId ?? (s.Name.Equals(row.Name, StringComparison.OrdinalIgnoreCase) ? row.SteamId : null),
+                        DriverRankAdjustment = m?.DriverRankAdjustment,
+                        SafetyRankAdjustment = m?.SafetyRankAdjustment,
+                    });
+                }
+                split.Results.Add(row);
             }
 
             split.DriverCount = split.Results.Count;
@@ -548,6 +619,7 @@ public sealed class ScannerService
         }
 
         e.Classes = OrderClasses(classes);
+        e.CrewChecked = true;
         e.Status = ScanEventStatus.Fetched;
         e.DetailVersion = CurrentDetailVersion;
         e.FetchedAt = DateTime.UtcNow;

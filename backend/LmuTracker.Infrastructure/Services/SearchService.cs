@@ -85,10 +85,16 @@ public sealed class SearchService : ISearchService
             .GroupBy(r => r.SteamId!)
             .Select(g => new { SteamId = g.Key, N = g.Count() })
             .ToDictionaryAsync(x => x.SteamId, x => x.N, ct);
+        // Carros divididos em que guiou um turno sem ter terminado (a linha leva o nome de quem terminou).
+        var crew = await _db.RaceCrewStints.AsNoTracking()
+            .Where(c => c.SteamId != null && steamIds.Contains(c.SteamId) && c.RaceResult.SteamId != c.SteamId)
+            .GroupBy(c => c.SteamId!)
+            .Select(g => new { SteamId = g.Key, N = g.Select(c => c.RaceResultId).Distinct().Count() })
+            .ToDictionaryAsync(x => x.SteamId, x => x.N, ct);
 
         return candidates
             .Select(c => new SearchDriverDto(c.Id, c.Name, c.Nationality, c.DriverRankTitle, c.DriverRankTier,
-                counts.GetValueOrDefault(c.SteamId)))
+                counts.GetValueOrDefault(c.SteamId) + crew.GetValueOrDefault(c.SteamId)))
             .OrderByDescending(d => Fold(d.Name).StartsWith(folded))
             .ThenByDescending(d => d.Races)
             .ThenBy(d => d.Name, StringComparer.OrdinalIgnoreCase)

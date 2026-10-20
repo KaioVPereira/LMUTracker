@@ -88,4 +88,7 @@ public class RaceResult : Entity
 
     /// <summary>Campos da linha do piloto que o scanner não lê um a um (penalidades etc.), crus e comprimidos.</summary>
     public byte[]? ExtraData { get; set; }
+
+    /// <summary>Turnos de cada piloto quando o carro foi dividido (vazio em corrida solo).</summary>
+    public List<RaceCrewStint> Crew { get; set; } = new();
 }

@@ -201,6 +201,16 @@ export interface ResultRow {
   hasLaps: boolean
   incidents: number | null
   penalties: number | null
+  /** Carro dividido (corrida de equipe): os turnos de cada piloto. Vazio/null = corrida solo. */
+  crew?: CrewStint[] | null
+}
+
+/** Turno de um piloto num carro dividido. A linha de resultado é do carro e leva o nome de quem terminou. */
+export interface CrewStint {
+  startLap: number
+  endLap: number
+  name: string
+  driverId: string | null
 }
 
 export interface SplitResults {
@@ -263,6 +273,8 @@ export interface DriverRace {
   safetyRankTier: number | null
   driverRankAdjustment: number | null
   safetyRankAdjustment: number | null
+  /** Em carro dividido: os colegas de carro (a melhor volta já é a dos turnos deste piloto). */
+  coDrivers?: string[] | null
 }
 
 export interface DriverStats {
@@ -535,6 +547,86 @@ export interface HeadToHead {
   races: HeadToHeadRace[]
 }
 
+// ---------- comparação por pista e classe ----------
+
+export interface CompareLap {
+  lapTime: number
+  s1: number | null
+  s2: number | null
+  s3: number | null
+  resultId: string
+  eventId: string
+  at: string
+  car: string | null
+  lap: number
+}
+
+export interface CompareRace {
+  resultId: string
+  eventId: string
+  title: string | null
+  startsAt: string
+  splitNo: number
+  car: string | null
+  classGridPos: number | null
+  classPosition: number | null
+  finishStatus: string | null
+  bestLap: number | null
+  pace: number | null
+  incidents: number | null
+}
+
+export interface CompareSide {
+  driverId: string
+  name: string
+  nationality: string | null
+  driverRankTitle: string | null
+  driverRankTier: number | null
+  safetyRankTitle: string | null
+  safetyRankTier: number | null
+  starts: number
+  wins: number
+  podiums: number
+  dnfs: number
+  avgClassFinish: number | null
+  bestClassFinish: number | null
+  avgClassGrid: number | null
+  avgPositionsGained: number | null
+  incidentsPerRace: number | null
+  bestLap: CompareLap | null
+  bestS1: number | null
+  bestS2: number | null
+  bestS3: number | null
+  /** Mediana das voltas limpas, na média das corridas. */
+  pace: number | null
+  /** Variação típica do ritmo numa corrida, em %. */
+  consistency: number | null
+  mainCar: string | null
+  races: CompareRace[]
+}
+
+export interface Compare { track: string; carClass: string; me: CompareSide; them: CompareSide; shared: HeadToHeadRace[] }
+
+export interface CompareSuggestion { driverId: string; name: string; nationality: string | null; value: number; races: number }
+export interface CompareSuggestions {
+  track: string
+  carClass: string
+  mostWins: CompareSuggestion[]
+  fastest: CompareSuggestion[]
+  mostRaces: CompareSuggestion[]
+}
+
+// ---------- novidades ----------
+
+export interface ChangelogEntry {
+  key: string
+  title: string
+  body: string
+  kind: 'feature' | 'improvement' | 'fix' | string
+  url: string | null
+  date: string
+}
+
 // ---------- detalhe da corrida ----------
 
 export interface SplitLap {
@@ -562,6 +654,7 @@ export interface SplitDriverLaps {
   finishStatus: string | null
   bestLap: number | null
   laps: SplitLap[]
+  crew?: CrewStint[] | null
 }
 
 export interface SplitLaps { eventId: string; splitNo: number; mostLaps: number; drivers: SplitDriverLaps[] }

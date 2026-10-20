@@ -30,18 +30,46 @@ public sealed class DriverStatsService : IDriverStatsService
         string? CarClass, string? Car, int? Position, int? ClassPosition, int? ClassGridPos, int? QualiClassPosition,
         string? FinishStatus, double? BestLap, int Laps, int? Incidents, int? Penalties,
         string? DrTitle, int? DrTier, int? DrProgress, int? DrAdj,
-        string? SrTitle, int? SrTier, int? SrProgress, int? SrAdj, byte[]? LapsData);
+        string? SrTitle, int? SrTier, int? SrProgress, int? SrAdj, byte[]? LapsData,
+        string? RowSteamId = null, List<CrewMath.Stint>? Crew = null);
 
-    private IQueryable<Row> RowsOf(string steamId) =>
-        _db.RaceResults.AsNoTracking()
-            .Where(r => r.SteamId == steamId)
+    /// <summary>
+    /// As corridas do piloto, inclusive os carros divididos em que ele guiou um turno — nesses, voltas e melhor volta
+    /// são só as dos turnos dele, e o rank/saldo da linha (de quem terminou) só vale quando foi ele quem terminou.
+    /// </summary>
+    private async Task<List<Row>> RowsOfAsync(string steamId, CancellationToken ct, string? track = null)
+    {
+        var q = LmuQueryService.RacesOf(_db, steamId).AsNoTracking();
+        if (track is not null) q = q.Where(r => r.RaceSplit.ScanEvent.Track == track);
+        var rows = await q
             .Select(r => new Row(
                 r.Id, r.RaceSplitId, r.RaceSplit.SplitNo, r.RaceSplit.ScanEvent.EventId, r.RaceSplit.ScanEvent.Title,
                 r.RaceSplit.ScanEvent.Track, r.RaceSplit.ScanEvent.EventStartsAt ?? r.RaceSplit.ScanEvent.RaceStartsAt,
                 r.CarClass, r.CarType, r.Position, r.ClassPosition, r.ClassGridPos, r.QualiClassPosition,
                 r.FinishStatus, r.BestLapTime, r.Laps, r.Incidents, r.Penalties,
                 r.DriverRankTitle, r.DriverRankTier, r.DriverRankProgress, r.DriverRankAdjustment,
-                r.SafetyRankTitle, r.SafetyRankTier, r.SafetyRankProgress, r.SafetyRankAdjustment, r.LapsData));
+                r.SafetyRankTitle, r.SafetyRankTier, r.SafetyRankProgress, r.SafetyRankAdjustment, r.LapsData,
+                r.SteamId,
+                r.Crew.OrderBy(c => c.Seq).Select(c => new CrewMath.Stint(c.SteamId, c.Name, c.StartLap, c.EndLap,
+                    c.DriverRankAdjustment, c.SafetyRankAdjustment)).ToList()))
+            .ToListAsync(ct);
+        return rows.Select(r => ForDriver(r, steamId)).ToList();
+    }
+
+    private static Row ForDriver(Row r, string steamId)
+    {
+        if (r.Crew is not { Count: > 0 } crew) return r;
+        var mine = CrewMath.LapsOf(LapCodec.Decode(r.LapsData), crew, steamId);
+        r = r with { BestLap = CrewMath.BestLap(mine) ?? r.BestLap, Laps = mine.Count, LapsData = LapCodec.Encode(mine) };
+        if (r.RowSteamId == steamId) return r;
+        // Rank do colega não é o dele: sem retrato de rank nesta corrida (o saldo do turno, quando conhecido, fica).
+        var stint = crew.FirstOrDefault(c => c.SteamId == steamId);
+        return r with
+        {
+            DrTitle = null, DrTier = null, DrProgress = null, DrAdj = stint?.DrAdj,
+            SrTitle = null, SrTier = null, SrProgress = null, SrAdj = stint?.SrAdj,
+        };
+    }
 
     public async Task<DriverProfileStatsDto?> GetAsync(Guid driverId, CancellationToken ct = default) =>
         await _cache.GetOrCreateAsync($"driver-stats:{driverId}", async entry =>
@@ -55,7 +83,7 @@ public sealed class DriverStatsService : IDriverStatsService
         var steamId = await _db.Drivers.Where(d => d.Id == driverId).Select(d => d.SteamId).FirstOrDefaultAsync(ct);
         if (steamId is null) return null;
 
-        var rows = (await RowsOf(steamId).ToListAsync(ct)).OrderBy(r => r.StartsAt).ToList();
+        var rows = (await RowsOfAsync(steamId, ct)).OrderBy(r => r.StartsAt).ToList();
         var finished = rows.Where(r => r.FinishStatus == FinishedNormally).ToList();
 
         // Volta mais rápida da classe em cada split do piloto (para "hat-trick": pole, vitória e volta mais rápida).
@@ -228,8 +256,8 @@ public sealed class DriverStatsService : IDriverStatsService
         var them = drivers.FirstOrDefault(d => d.Id == otherId);
         if (me is null || them is null || driverId == otherId) return null;
 
-        var mine = await RowsOf(me.SteamId).ToListAsync(ct);
-        var theirs = await RowsOf(them.SteamId).ToListAsync(ct);
+        var mine = await RowsOfAsync(me.SteamId, ct);
+        var theirs = await RowsOfAsync(them.SteamId, ct);
         var bySplit = theirs.GroupBy(r => r.SplitId).ToDictionary(g => g.Key, g => g.First());
 
         var shared = mine.Where(r => bySplit.ContainsKey(r.SplitId))
@@ -255,6 +283,141 @@ public sealed class DriverStatsService : IDriverStatsService
                 x.Them.CarClass, x.Them.Position, x.Them.ClassPosition, x.Them.BestLap, x.Them.FinishStatus)).ToList());
     }
 
+    // ---------------------------------------------------------------- comparação por pista e classe
+
+    /// <summary>Mesma regra do site (lib/classes.ts): as variantes do RaceOS contam como a mesma classe.</summary>
+    internal static string ClassKey(string? raw)
+    {
+        var c = (raw ?? "").ToUpperInvariant();
+        if (c.StartsWith("HYPER") || c is "LMH" or "LMDH") return "hyper";
+        if (c.StartsWith("LMP2")) return "lmp2";
+        if (c.StartsWith("LMP3")) return "lmp3";
+        if (c.Contains("GT3")) return "gt3";
+        return c.ToLowerInvariant();
+    }
+
+    public async Task<CompareDto?> CompareAsync(Guid driverId, Guid otherId, string track, string carClass,
+        CancellationToken ct = default)
+    {
+        var drivers = await _db.Drivers.AsNoTracking().Where(d => d.Id == driverId || d.Id == otherId).ToListAsync(ct);
+        var me = drivers.FirstOrDefault(d => d.Id == driverId);
+        var them = drivers.FirstOrDefault(d => d.Id == otherId);
+        if (me is null || them is null || driverId == otherId || string.IsNullOrWhiteSpace(track)) return null;
+
+        var cls = ClassKey(carClass);
+        async Task<List<Row>> Here(string steamId) => (await RowsOfAsync(steamId, ct, track))
+            .Where(r => ClassKey(r.CarClass) == cls).OrderByDescending(r => r.StartsAt).ToList();
+        var mine = await Here(me.SteamId);
+        var theirs = await Here(them.SteamId);
+
+        var bySplit = theirs.GroupBy(r => r.SplitId).ToDictionary(g => g.Key, g => g.First());
+        var shared = mine.Where(r => bySplit.ContainsKey(r.SplitId)).Select(r => (Me: r, Them: bySplit[r.SplitId]))
+            .Select(x => new HeadToHeadRaceDto(
+                x.Me.EventId, x.Me.Title, x.Me.Track, x.Me.StartsAt, x.Me.SplitNo,
+                x.Me.CarClass, x.Me.Position, x.Me.ClassPosition, x.Me.BestLap, x.Me.FinishStatus,
+                x.Them.CarClass, x.Them.Position, x.Them.ClassPosition, x.Them.BestLap, x.Them.FinishStatus))
+            .ToList();
+
+        return new CompareDto(track, cls, CompareSide(me, mine), CompareSide(them, theirs), shared);
+    }
+
+    private static CompareSideDto CompareSide(LmuTracker.Domain.Entities.Driver d, List<Row> rows)
+    {
+        var fin = rows.Where(r => r.FinishStatus == FinishedNormally).ToList();
+        var gained = fin.Where(r => r.ClassGridPos is not null && r.ClassPosition is not null)
+            .Select(r => (double)(r.ClassGridPos!.Value - r.ClassPosition!.Value)).ToList();
+        var inc = rows.Where(r => r.Incidents is not null).ToList();
+
+        CompareLapDto? best = null;
+        double? s1 = null, s2 = null, s3 = null;
+        var paces = new List<double>();
+        var cvs = new List<double>();
+        var races = new List<CompareRaceDto>();
+        foreach (var r in rows)
+        {
+            var laps = LapCodec.Decode(r.LapsData);
+            var valid = laps.Where(l => !l.Pit && l.LapTime is > 0).ToList();
+            foreach (var l in valid)
+            {
+                s1 = MinOf(s1, l.S1);
+                s2 = MinOf(s2, l.S2);
+                s3 = MinOf(s3, l.S3);
+            }
+            var b = valid.OrderBy(l => l.LapTime).FirstOrDefault();
+            if (b is not null && (best is null || b.LapTime < best.LapTime))
+                best = new CompareLapDto(b.LapTime!.Value, b.S1, b.S2, b.S3, r.ResultId, r.EventId, r.StartsAt, r.Car, b.Lap);
+            else if (b is null && r.BestLap is { } bl && (best is null || bl < best.LapTime))
+                best = new CompareLapDto(bl, null, null, null, r.ResultId, r.EventId, r.StartsAt, r.Car, 0);
+
+            var pace = CleanMedian(laps);
+            if (pace is not null) paces.Add(pace.Value);
+            if (PaceCv(laps) is { } cv) cvs.Add(cv);
+            races.Add(new CompareRaceDto(r.ResultId, r.EventId, r.Title, r.StartsAt, r.SplitNo, r.Car, r.ClassGridPos,
+                r.ClassPosition, r.FinishStatus, b?.LapTime ?? r.BestLap, pace is null ? null : Math.Round(pace.Value, 3), r.Incidents));
+        }
+        cvs.Sort();
+
+        return new CompareSideDto(
+            d.Id, d.Name, d.Nationality, d.DriverRankTitle, d.DriverRankTier, d.SafetyRankTitle, d.SafetyRankTier,
+            rows.Count, rows.Count(r => r.ClassPosition == 1), rows.Count(r => r.ClassPosition is >= 1 and <= 3),
+            rows.Count(r => r.FinishStatus is not null && r.FinishStatus != FinishedNormally && r.FinishStatus != "None"),
+            Avg(fin.Select(r => r.ClassPosition)), fin.Min(r => r.ClassPosition), Avg(rows.Select(r => r.ClassGridPos)),
+            gained.Count > 0 ? Math.Round(gained.Average(), 2) : null,
+            inc.Count > 0 ? Math.Round(inc.Average(r => r.Incidents!.Value), 2) : null,
+            best, s1, s2, s3,
+            paces.Count > 0 ? Math.Round(paces.Average(), 3) : null,
+            cvs.Count > 0 ? Math.Round(cvs[cvs.Count / 2] * 100, 2) : null,
+            rows.Where(r => r.Car is not null).GroupBy(r => r.Car).OrderByDescending(g => g.Count()).Select(g => g.Key).FirstOrDefault(),
+            races.Take(60).ToList());
+    }
+
+    private static double? MinOf(double? a, double? b) => b is not > 0 ? a : a is null ? b : Math.Min(a.Value, b.Value);
+
+    /// <summary>Mediana das voltas limpas (sem pit, sem a 1ª, até 107% da melhor). Null com menos de 3.</summary>
+    private static double? CleanMedian(IReadOnlyList<LapDto> laps)
+    {
+        var times = laps.Where(l => !l.Pit && l.Lap > 1 && l.LapTime is > 0).Select(l => l.LapTime!.Value).ToList();
+        if (times.Count < 3) return null;
+        var best = times.Min();
+        var clean = times.Where(t => t <= best * 1.07).OrderBy(t => t).ToList();
+        if (clean.Count < 3) return null;
+        return clean.Count % 2 == 1 ? clean[clean.Count / 2] : (clean[clean.Count / 2 - 1] + clean[clean.Count / 2]) / 2;
+    }
+
+    public async Task<CompareSuggestionsDto> SuggestAsync(string track, string carClass, CancellationToken ct = default) =>
+        (await _cache.GetOrCreateAsync($"cmp-suggest:{track}|{carClass}", async entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
+            var cls = ClassKey(carClass);
+            var stats = await ExtrasService.OfClass(_db.RaceResults.AsNoTracking()
+                    .Where(r => r.SteamId != null && r.RaceSplit.ScanEvent.Track == track), cls)
+                .GroupBy(r => r.SteamId!)
+                .Select(g => new
+                {
+                    SteamId = g.Key,
+                    Starts = g.Count(),
+                    Wins = g.Count(r => r.ClassPosition == 1),
+                    Best = g.Min(r => r.BestLapTime),
+                })
+                .ToListAsync(ct);
+            var wins = stats.Where(s => s.Wins > 0).OrderByDescending(s => s.Wins).ThenBy(s => s.Starts).Take(6).ToList();
+            var fastest = stats.Where(s => s.Best is not null).OrderBy(s => s.Best).Take(6).ToList();
+            var active = stats.OrderByDescending(s => s.Starts).Take(6).ToList();
+
+            var steam = wins.Concat(fastest).Concat(active).Select(s => s.SteamId).Distinct().ToList();
+            var people = await _db.Drivers.AsNoTracking().Where(d => steam.Contains(d.SteamId))
+                .ToDictionaryAsync(d => d.SteamId, ct);
+            List<CompareSuggestionDto> Map<T>(IEnumerable<T> list, Func<T, string> sid, Func<T, double> value, Func<T, int> starts) =>
+                list.Where(x => people.ContainsKey(sid(x)))
+                    .Select(x => people[sid(x)] is var p ? new CompareSuggestionDto(p.Id, p.Name, p.Nationality, value(x), starts(x)) : null!)
+                    .ToList();
+
+            return new CompareSuggestionsDto(track, cls,
+                Map(wins, s => s.SteamId, s => s.Wins, s => s.Starts),
+                Map(fastest, s => s.SteamId, s => s.Best!.Value, s => s.Starts),
+                Map(active, s => s.SteamId, s => s.Starts, s => s.Starts));
+        }))!;
+
     // ---------------------------------------------------------------- utilidades
 
     /// <summary>Bronze 1 = 0…100, Bronze 2 = 100…200, Bronze 3 = 200…300, Silver 1 = 300… (tiers sobem de 1 a 3).</summary>
@@ -275,9 +438,10 @@ public sealed class DriverStatsService : IDriverStatsService
     /// Variação do ritmo numa corrida (desvio-padrão ÷ média) só nas voltas "limpas": sem pit, sem a 1ª e até 107%
     /// da melhor. Menor = mais constante. Null com menos de 5 voltas limpas.
     /// </summary>
-    private static double? PaceCv(byte[]? lapsData)
+    private static double? PaceCv(byte[]? lapsData) => PaceCv(LapCodec.Decode(lapsData));
+
+    private static double? PaceCv(IReadOnlyList<LapDto> laps)
     {
-        var laps = LapCodec.Decode(lapsData);
         var times = laps.Where(l => !l.Pit && l.Lap > 1 && l.LapTime is > 0).Select(l => l.LapTime!.Value).ToList();
         if (times.Count < 5) return null;
         var best = times.Min();

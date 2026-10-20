@@ -74,7 +74,7 @@ public sealed class LmuQueryService : ILmuQueryService
                 Array.Empty<MyResultDto>());
 
         var driver = await _db.Drivers.FirstOrDefaultAsync(d => d.SteamId == steamId, ct);
-        var mine = _db.RaceResults.Where(r => r.SteamId == steamId);
+        var mine = RacesOf(_db, steamId);
         var racesFound = await mine.CountAsync(ct);
 
         var recent = await mine
@@ -229,6 +229,8 @@ public sealed class LmuQueryService : ILmuQueryService
                 {
                     r.Id, DriverId = drv == null ? (Guid?)null : drv.Id, r.Name, r.CarClass, r.CarNumber, r.CarType,
                     r.GridPos, r.ClassGridPos, r.Position, r.ClassPosition, r.FinishStatus, r.BestLapTime, r.LapsData,
+                    Crew = r.Crew.OrderBy(c => c.Seq).Select(c => new CrewStintDto(c.StartLap, c.EndLap, c.Name,
+                        _db.Drivers.Where(x => x.SteamId == c.SteamId).Select(x => (Guid?)x.Id).FirstOrDefault())).ToList(),
                 })
             .ToListAsync(ct);
 
@@ -256,7 +258,8 @@ public sealed class LmuQueryService : ILmuQueryService
                 d.Row.GridPos, d.Row.ClassGridPos, d.Row.Position, d.Row.ClassPosition, d.Row.FinishStatus, d.Row.BestLapTime,
                 d.Laps.Select(l => new SplitLapDto(l.Lap, l.Position,
                     classPos.TryGetValue((d.Row.Id, l.Lap), out var cp) ? cp : null,
-                    l.LapTime, l.Elapsed, l.Pit, l.RearCompound ?? l.FrontCompound, l.Fuel)).ToList()))
+                    l.LapTime, l.Elapsed, l.Pit, l.RearCompound ?? l.FrontCompound, l.Fuel)).ToList(),
+                d.Row.Crew.Count > 0 ? d.Row.Crew : null))
             .ToList();
         return new SplitLapsDto(eventId, splitNo, split.MostLapsCompleted, drivers);
     }
@@ -282,7 +285,7 @@ public sealed class LmuQueryService : ILmuQueryService
         if (d is null) return null;
         page = Math.Max(1, page);
 
-        var mine = _db.RaceResults.Where(r => r.SteamId == d.SteamId);
+        var mine = RacesOf(_db, d.SteamId);
 
         var stats = await mine
             .GroupBy(_ => 1)
@@ -298,19 +301,27 @@ public sealed class LmuQueryService : ILmuQueryService
             .FirstOrDefaultAsync(ct) ?? new DriverStatsDto(0, 0, 0, 0, 0, 0, null, 0);
 
         var total = stats.Races;
-        var races = await mine
+        var raw = await mine
             .OrderByDescending(r => r.RaceSplit.ScanEvent.EventStartsAt ?? r.RaceSplit.ScanEvent.RaceStartsAt)
             .Skip((page - 1) * DriverRacesPageSize)
             .Take(DriverRacesPageSize)
-            .Select(r => new DriverRaceDto(
-                r.Id, r.RaceSplit.ScanEvent.EventId, r.RaceSplit.ScanEvent.Title, r.RaceSplit.ScanEvent.Track,
-                r.RaceSplit.ScanEvent.Tier, r.RaceSplit.ScanEvent.EventType,
-                r.RaceSplit.ScanEvent.EventStartsAt ?? r.RaceSplit.ScanEvent.RaceStartsAt,
-                r.RaceSplit.SplitNo, r.CarClass, r.VehName, r.ClassGridPos, r.ClassPosition, r.Position,
-                r.BestLapTime, r.FinishStatus,
-                r.DriverRankTitle, r.DriverRankTier, r.SafetyRankTitle, r.SafetyRankTier,
-                r.DriverRankAdjustment, r.SafetyRankAdjustment))
+            .Select(r => new
+            {
+                Dto = new DriverRaceDto(
+                    r.Id, r.RaceSplit.ScanEvent.EventId, r.RaceSplit.ScanEvent.Title, r.RaceSplit.ScanEvent.Track,
+                    r.RaceSplit.ScanEvent.Tier, r.RaceSplit.ScanEvent.EventType,
+                    r.RaceSplit.ScanEvent.EventStartsAt ?? r.RaceSplit.ScanEvent.RaceStartsAt,
+                    r.RaceSplit.SplitNo, r.CarClass, r.VehName, r.ClassGridPos, r.ClassPosition, r.Position,
+                    r.BestLapTime, r.FinishStatus,
+                    r.DriverRankTitle, r.DriverRankTier, r.SafetyRankTitle, r.SafetyRankTier,
+                    r.DriverRankAdjustment, r.SafetyRankAdjustment, null),
+                r.SteamId,
+                Crew = r.Crew.OrderBy(c => c.Seq).Select(c => new CrewMath.Stint(c.SteamId, c.Name, c.StartLap, c.EndLap,
+                    c.DriverRankAdjustment, c.SafetyRankAdjustment)).ToList(),
+                LapsData = r.Crew.Any() ? r.LapsData : null,
+            })
             .ToListAsync(ct);
+        var races = raw.Select(x => ForDriver(x.Dto, x.SteamId, x.Crew, x.LapsData, d.SteamId)).ToList();
 
         var mySteam = await _db.Users.Where(u => u.Id == currentUserId).Select(u => u.SteamId).FirstOrDefaultAsync(ct);
         var followed = currentUserId != Guid.Empty
@@ -322,6 +333,24 @@ public sealed class LmuQueryService : ILmuQueryService
             d.SafetyRankTitle, d.SafetyRankTier, d.SafetyRankProgress,
             d.LastSeenAt, mySteam is not null && mySteam == d.SteamId, stats,
             new PagedDto<DriverRaceDto>(races, page, DriverRacesPageSize, total), followed);
+    }
+
+    /// <summary>
+    /// A corrida vista pelo piloto: num carro dividido, a melhor volta é a dos turnos dele e, quando quem terminou
+    /// foi o colega, o DR/SR da linha (que é do colega) dá lugar ao saldo do turno dele (quando conhecido).
+    /// </summary>
+    private static DriverRaceDto ForDriver(DriverRaceDto dto, string? rowSteamId, List<CrewMath.Stint> crew,
+        byte[]? lapsData, string steamId)
+    {
+        if (crew.Count == 0) return dto;
+        var mine = CrewMath.LapsOf(LapCodec.Decode(lapsData), crew, steamId);
+        var stint = crew.FirstOrDefault(c => c.SteamId == steamId);
+        dto = dto with { BestLapTime = CrewMath.BestLap(mine) ?? dto.BestLapTime, CoDrivers = CrewMath.Others(crew, steamId) };
+        return rowSteamId == steamId ? dto : dto with
+        {
+            DriverRankTitle = null, DriverRankTier = null, SafetyRankTitle = null, SafetyRankTier = null,
+            DriverRankAdjustment = stint?.DrAdj, SafetyRankAdjustment = stint?.SrAdj,
+        };
     }
 
     /// <summary>Linha de classificação com o id interno do piloto (nunca o SteamID).</summary>
@@ -336,5 +365,11 @@ public sealed class LmuQueryService : ILmuQueryService
             r.BestLapTime, r.FinishTime, r.FinishStatus, r.PitStops,
             r.QualiPosition, r.QualiClassPosition, r.QualiBestLapTime,
             r.DriverRankTitle, r.DriverRankTier, r.SafetyRankTitle, r.SafetyRankTier,
-            r.DriverRankAdjustment, r.SafetyRankAdjustment, r.LapsData != null, r.Incidents, r.Penalties);
+            r.DriverRankAdjustment, r.SafetyRankAdjustment, r.LapsData != null, r.Incidents, r.Penalties,
+            r.Crew.OrderBy(c => c.Seq).Select(c => new CrewStintDto(c.StartLap, c.EndLap, c.Name,
+                _db.Drivers.Where(x => x.SteamId == c.SteamId).Select(x => (Guid?)x.Id).FirstOrDefault())).ToList());
+
+    /// <summary>Corridas do piloto: as dele e as de carros divididos em que ele guiou algum turno.</summary>
+    internal static IQueryable<RaceResult> RacesOf(AppDbContext db, string steamId) =>
+        db.RaceResults.Where(r => r.SteamId == steamId || r.Crew.Any(c => c.SteamId == steamId));
 }

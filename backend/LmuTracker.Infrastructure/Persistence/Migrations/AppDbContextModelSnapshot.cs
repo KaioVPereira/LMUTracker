@@ -148,6 +148,56 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
                     b.ToTable("Follows");
                 });
 
+            modelBuilder.Entity("LmuTracker.Domain.Entities.RaceCrewStint", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("DriverRankAdjustment")
+                        .HasColumnType("int");
+
+                    b.Property<int>("EndLap")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(96)
+                        .HasColumnType("nvarchar(96)");
+
+                    b.Property<Guid>("RaceResultId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int?>("SafetyRankAdjustment")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Seq")
+                        .HasColumnType("int");
+
+                    b.Property<int>("StartLap")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SteamId")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RaceResultId");
+
+                    b.HasIndex("SteamId");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("SteamId"), new[] { "RaceResultId" });
+
+                    b.ToTable("RaceCrewStints", (string)null);
+                });
+
             modelBuilder.Entity("LmuTracker.Domain.Entities.RaceResult", b =>
                 {
                     b.Property<Guid>("Id")
@@ -343,6 +393,9 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<bool>("CrewChecked")
+                        .HasColumnType("bit");
 
                     b.Property<int>("DetailVersion")
                         .HasColumnType("int");
@@ -558,6 +611,9 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsSuperAdmin")
                         .HasColumnType("bit");
 
+                    b.Property<DateTime?>("LastSeenChangelogAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<DateTime?>("LinkedAt")
                         .HasColumnType("datetime2");
 
@@ -591,6 +647,17 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("Users");
+                });
+
+            modelBuilder.Entity("LmuTracker.Domain.Entities.RaceCrewStint", b =>
+                {
+                    b.HasOne("LmuTracker.Domain.Entities.RaceResult", "RaceResult")
+                        .WithMany("Crew")
+                        .HasForeignKey("RaceResultId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("RaceResult");
                 });
 
             modelBuilder.Entity("LmuTracker.Domain.Entities.RaceResult", b =>
@@ -654,6 +721,11 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
                     b.Navigation("Admin");
 
                     b.Navigation("Ticket");
+                });
+
+            modelBuilder.Entity("LmuTracker.Domain.Entities.RaceResult", b =>
+                {
+                    b.Navigation("Crew");
                 });
 
             modelBuilder.Entity("LmuTracker.Domain.Entities.RaceSplit", b =>

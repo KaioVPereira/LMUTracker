@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import type { EventInfo, RaceDetail, SplitEvents, SplitLaps, SplitResults } from '../api/types'
+import type { EventInfo, RaceDetail, ResultRow, SplitEvents, SplitLaps, SplitResults } from '../api/types'
 import { ClassBarCell, ClassChip, ClassChips, Delta, EmptyState, ErrorBox, Loading, Rank, TierChip } from '../components/Bits'
 import { PaceChart, PositionChart, StrategyChart } from '../components/RaceCharts'
 import { TopBar } from '../components/TopBar'
 import { TrackMap } from '../components/TrackMap'
 import { classKey, classShort } from '../lib/classes'
+import { carLabel, crewMembers } from '../lib/crew'
 import { fmtGameTime, skyLabel } from '../lib/eventPhase'
 import { MAX_SERIES, SERIES } from '../lib/series'
 import { finishLabel, fmtDateTime, fmtLap, fmtRaceTime, typeLabel } from '../lib/format'
@@ -56,7 +57,7 @@ export function RacePage() {
   const classes = [...new Set(rows.map((x) => classKey(x.carClass)))].filter((k) => k !== 'other')
   const inClass = (c: string | null) => !cls || classKey(c) === cls
   const shownRows = rows.filter((x) => inClass(x.carClass))
-  const lapDrivers = (laps.data?.drivers ?? []).filter((d) => inClass(d.carClass))
+  const lapDrivers = (laps.data?.drivers ?? []).filter((d) => inClass(d.carClass)).map((d) => ({ ...d, name: carLabel(d) }))
     .sort((a, b) => (cls ? (a.classPosition ?? 999) - (b.classPosition ?? 999) : (a.position ?? 999) - (b.position ?? 999)))
 
   // Destacados nos gráficos: escolha da pessoa para este split+classe, senão os 5 primeiros.
@@ -160,6 +161,7 @@ export function RacePage() {
                                 ? <Link to={`/pilotos/${x.driverId}`} onClick={(e) => e.stopPropagation()}>{x.name}</Link>
                                 : x.name}
                               <Flag code={x.nationality} />
+                              <CoDrivers row={x} />
                             </td>
                             <td className="car">{x.vehName ?? '—'}</td>
                             <td className="num">{x.classGridPos ?? x.gridPos ?? '—'}</td>
@@ -247,6 +249,19 @@ export function RacePage() {
         )}
       </div>
     </>
+  )
+}
+
+/** Carro dividido: os outros pilotos do carro, abaixo de quem terminou. */
+function CoDrivers({ row }: { row: ResultRow }) {
+  const others = crewMembers(row.crew).filter((m) => m.name.toLowerCase() !== row.name.toLowerCase())
+  if (!others.length) return null
+  return (
+    <span className="crew-line">
+      com {others.map((m, i) => (
+        <span key={m.name}>{i > 0 && ', '}{m.driverId ? <Link to={`/pilotos/${m.driverId}`} onClick={(e) => e.stopPropagation()}>{m.name}</Link> : m.name}</span>
+      ))}
+    </span>
   )
 }
 

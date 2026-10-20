@@ -89,6 +89,19 @@ if (args.Contains("backfill-incidents"))
     return;
 }
 
+// Lê os revezamentos de piloto (carros divididos) do resultado cru já guardado, sem falar com o RaceOS, e sai.
+if (args.Contains("backfill-crew"))
+{
+    using var hostC = builder.Build();
+    using var scopeC = hostC.Services.CreateScope();
+    var scanner = scopeC.ServiceProvider.GetRequiredService<LmuTracker.Infrastructure.Scanning.ScannerService>();
+    var total = 0;
+    int n;
+    while ((n = await scanner.BackfillCrewAsync(CancellationToken.None)) > 0) total += n;
+    Console.WriteLine($"Corridas verificadas: {total}");
+    return;
+}
+
 // Modo de status: `dotnet run -- report` imprime um resumo do que já foi guardado e sai.
 if (args.Contains("report"))
 {

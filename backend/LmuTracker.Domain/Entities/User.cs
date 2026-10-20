@@ -27,4 +27,7 @@ public class User : Entity
 
     /// <summary>Quando o vínculo Steam foi concluído. Null enquanto não vinculou.</summary>
     public DateTime? LinkedAt { get; set; }
+
+    /// <summary>Data da novidade mais recente que a pessoa já viu (o mural só mostra as posteriores). Null = nunca viu.</summary>
+    public DateTime? LastSeenChangelogAt { get; set; }
 }

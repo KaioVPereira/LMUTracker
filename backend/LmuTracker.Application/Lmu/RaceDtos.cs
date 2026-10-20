@@ -22,11 +22,17 @@ public record RaceDetailDto(
 public record SplitLapDto(int Lap, int? Position, int? ClassPosition, double? LapTime, double? Elapsed, bool Pit,
     string? Compound, double? Fuel);
 
+/// <summary>
+/// Turno de um piloto num carro dividido (corrida de equipe com troca de piloto). A linha de resultado é do carro e
+/// leva o nome de quem terminou; os turnos dizem quem guiou cada trecho.
+/// </summary>
+public record CrewStintDto(int StartLap, int EndLap, string Name, Guid? DriverId);
+
 /// <summary>O volta a volta de um piloto no split (para posições, ritmo e estratégia).</summary>
 public record SplitDriverLapsDto(
     Guid ResultId, Guid? DriverId, string Name, string? CarClass, string? CarNumber, string? Car,
     int? GridPos, int? ClassGridPos, int? Position, int? ClassPosition, string? FinishStatus, double? BestLap,
-    IReadOnlyList<SplitLapDto> Laps);
+    IReadOnlyList<SplitLapDto> Laps, IReadOnlyList<CrewStintDto>? Crew = null);
 
 public record SplitLapsDto(string EventId, int SplitNo, int MostLaps, IReadOnlyList<SplitDriverLapsDto> Drivers);
 
@@ -43,7 +49,8 @@ public record ResultRowDto(
     double? BestLapTime, double? FinishTime, string? FinishStatus, int PitStops,
     int? QualiPosition, int? QualiClassPosition, double? QualiBestLapTime,
     string? DriverRankTitle, int? DriverRankTier, string? SafetyRankTitle, int? SafetyRankTier,
-    int? DriverRankAdjustment, int? SafetyRankAdjustment, bool HasLaps, int? Incidents, int? Penalties);
+    int? DriverRankAdjustment, int? SafetyRankAdjustment, bool HasLaps, int? Incidents, int? Penalties,
+    IReadOnlyList<CrewStintDto>? Crew = null);
 
 public record SplitResultsDto(string EventId, int SplitNo, IReadOnlyList<ResultRowDto> Rows);
 
@@ -64,7 +71,7 @@ public record DriverRaceDto(
     DateTime StartsAt, int SplitNo, string? CarClass, string? VehName,
     int? ClassGridPos, int? ClassPosition, int? Position, double? BestLapTime, string? FinishStatus,
     string? DriverRankTitle, int? DriverRankTier, string? SafetyRankTitle, int? SafetyRankTier,
-    int? DriverRankAdjustment, int? SafetyRankAdjustment);
+    int? DriverRankAdjustment, int? SafetyRankAdjustment, IReadOnlyList<string>? CoDrivers = null);
 
 public record DriverStatsDto(
     int Races, int Wins, int Podiums, int Top5, int Poles, int Dnfs, int? BestFinish, int LapsCompleted);

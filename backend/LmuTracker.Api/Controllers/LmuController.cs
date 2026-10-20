@@ -117,6 +117,22 @@ public class LmuController : ApiControllerBase
     public async Task<ActionResult<HeadToHeadDto>> HeadToHead(Guid driverId, Guid otherId, CancellationToken ct)
         => await _stats.HeadToHeadAsync(driverId, otherId, ct) is { } h ? Ok(h) : NotFound();
 
+    /// <summary>Os dois numa pista e classe: melhor volta por setor, ritmo, chegadas e as corridas de cada um ali.</summary>
+    [HttpGet("drivers/{driverId:guid}/compare/{otherId:guid}")]
+    [OutputCache(Duration = 30)]
+    public async Task<ActionResult<CompareDto>> Compare(Guid driverId, Guid otherId, [FromQuery] string? track,
+        [FromQuery(Name = "class")] string? carClass, CancellationToken ct)
+        => !string.IsNullOrWhiteSpace(track) && !string.IsNullOrWhiteSpace(carClass)
+           && await _stats.CompareAsync(driverId, otherId, track, carClass, ct) is { } c ? Ok(c) : NotFound();
+
+    /// <summary>Adversários sugeridos para o comparativo: quem mais venceu, mais rápido e mais ativo na pista e classe.</summary>
+    [HttpGet("compare/suggestions")]
+    [OutputCache(Duration = 60)]
+    public async Task<ActionResult<CompareSuggestionsDto>> CompareSuggestions([FromQuery] string? track,
+        [FromQuery(Name = "class")] string? carClass, CancellationToken ct)
+        => string.IsNullOrWhiteSpace(track) || string.IsNullOrWhiteSpace(carClass)
+            ? BadRequest() : Ok(await _stats.SuggestAsync(track, carClass, ct));
+
     /// <summary>Destaques da tela inicial (recordes, vencedores, saldo de DR, chegadas apertadas). Cache de 60 s.</summary>
     [HttpGet("home")]
     [OutputCache(Duration = 30)]

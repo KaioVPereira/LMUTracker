@@ -170,7 +170,7 @@ export function PaceChart({ drivers, selected }: { drivers: SplitDriverLaps[]; s
 }
 
 /** Estratégia: uma linha por piloto, a corrida em stints coloridos pelo composto, com as paradas marcadas. */
-export function StrategyChart({ drivers }: { drivers: SplitDriverLaps[] }) {
+export function StrategyChart({ drivers, highlight }: { drivers: SplitDriverLaps[]; highlight?: string }) {
   const maxLap = Math.max(1, ...drivers.flatMap((d) => d.laps.map((l) => l.lap)))
   const compounds = new Set<string>()
   return (
@@ -186,7 +186,7 @@ export function StrategyChart({ drivers }: { drivers: SplitDriverLaps[] }) {
         }
         const pits = d.laps.filter((l) => l.pit).map((l) => l.lap)
         return (
-          <div key={d.resultId} className="strat-row">
+          <div key={d.resultId} className={`strat-row${d.resultId === highlight ? ' is-me' : ''}`}>
             <span className="strat-name"><b>{d.classPosition ? `P${d.classPosition}` : '—'}</b> {d.name}</span>
             <span className="strat-bar" aria-label={`${d.name}: ${pits.length} parada${pits.length === 1 ? '' : 's'}${pits.length ? ` (voltas ${pits.join(', ')})` : ''}`}>
               {stints.map((s, i) => (

@@ -1,5 +1,8 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
+import { ChangelogModal } from './components/Changelog'
+import { ComparePage } from './pages/ComparePage'
+import { NewsPage } from './pages/NewsPage'
 import { RequireAuth } from './components/RequireAuth'
 import { AppAndroidPage } from './pages/AppAndroidPage'
 import { CarPage } from './pages/CarPage'
@@ -22,6 +25,7 @@ export default function App() {
   return (
     <>
     <AppShell />
+    <ChangelogModal />
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/" element={<DashboardPage />} />
@@ -32,6 +36,8 @@ export default function App() {
       <Route path="/pistas/:track" element={<TrackPage />} />
       <Route path="/carros/:car" element={<CarPage />} />
       <Route path="/pilotos/:driverId/vs/:otherId" element={<HeadToHeadPage />} />
+      <Route path="/pilotos/:driverId/comparar" element={<ComparePage />} />
+      <Route path="/novidades" element={<NewsPage />} />
       <Route path="/pilotos/:driverId" element={<DriverPage />} />
       <Route path="/perfil" element={<RequireAuth><MyProfilePage /></RequireAuth>} />
       <Route path="/chamados" element={<RequireAuth><MyTicketsPage /></RequireAuth>} />

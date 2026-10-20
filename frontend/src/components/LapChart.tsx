@@ -1,15 +1,15 @@
-import type { Lap } from '../api/types'
+import type { CrewStint, Lap } from '../api/types'
 import { fmtLap } from '../lib/format'
 
 /**
  * Tempo por volta. Voltas de pit e a primeira (largada) ficam fora da escala — senão um pit de +25s achata o
  * resto do gráfico — e aparecem como marcas na base. A melhor volta é destacada.
  */
-export function LapChart({ laps }: { laps: Lap[] }) {
+export function LapChart({ laps, crew }: { laps: Lap[]; crew?: CrewStint[] | null }) {
   const pace = laps.filter((l) => l.lapTime && !l.pit && l.lap > 1)
   if (pace.length < 2) return null
 
-  const W = 720, H = 200, PL = 56, PR = 12, PT = 14, PB = 26
+  const W = 720, H = 200, PL = 66, PR = 12, PT = 14, PB = 26
   const times = pace.map((l) => l.lapTime!)
   const best = Math.min(...times)
   let min = best
@@ -54,6 +54,13 @@ export function LapChart({ laps }: { laps: Lap[] }) {
             </g>
           )
         })}
+        {/* Carro dividido: troca de piloto no começo de cada turno (embaixo, para não brigar com o rótulo do pit). */}
+        {(crew ?? []).filter((s) => s.startLap > first).map((s) => (
+          <g key={`swap-${s.startLap}`}>
+            <line x1={x(s.startLap - 0.5)} x2={x(s.startLap - 0.5)} y1={PT} y2={H - PB} className="swapline" />
+            <text x={x(s.startLap - 0.5) + 3} y={H - PB - 4} className="axis swap-label">{s.name}</text>
+          </g>
+        ))}
       </svg>
       </div>
       <figcaption className="note">

@@ -55,8 +55,43 @@ public record HeadToHeadDto(
     int Shared, int MeAhead, int ThemAhead, int SameClassRaces, double? AvgBestLapGap,
     IReadOnlyList<HeadToHeadRaceDto> Races);
 
+// ---------- comparação por pista e classe ----------
+
+/// <summary>A melhor volta do piloto no recorte, com os setores (null quando a corrida não tem o volta a volta).</summary>
+public record CompareLapDto(double LapTime, double? S1, double? S2, double? S3, Guid ResultId, string EventId,
+    DateTime At, string? Car, int Lap);
+
+/// <summary>Uma corrida do piloto no recorte (pista + classe).</summary>
+public record CompareRaceDto(
+    Guid ResultId, string EventId, string? Title, DateTime StartsAt, int SplitNo, string? Car,
+    int? ClassGridPos, int? ClassPosition, string? FinishStatus, double? BestLap, double? Pace, int? Incidents);
+
+/// <summary>Um lado do comparativo. Pace = mediana das voltas limpas (média entre as corridas).</summary>
+public record CompareSideDto(
+    Guid DriverId, string Name, string? Nationality, string? DriverRankTitle, int? DriverRankTier,
+    string? SafetyRankTitle, int? SafetyRankTier,
+    int Starts, int Wins, int Podiums, int Dnfs, double? AvgClassFinish, int? BestClassFinish, double? AvgClassGrid,
+    double? AvgPositionsGained, double? IncidentsPerRace,
+    CompareLapDto? BestLap, double? BestS1, double? BestS2, double? BestS3, double? Pace, double? Consistency,
+    string? MainCar, IReadOnlyList<CompareRaceDto> Races);
+
+public record CompareDto(string Track, string CarClass, CompareSideDto Me, CompareSideDto Them,
+    IReadOnlyList<HeadToHeadRaceDto> Shared);
+
+/// <summary>Sugestão de adversário para o comparativo: quem se destaca na pista e classe.</summary>
+public record CompareSuggestionDto(Guid DriverId, string Name, string? Nationality, double Value, int Races);
+
+public record CompareSuggestionsDto(
+    string Track, string CarClass,
+    IReadOnlyList<CompareSuggestionDto> MostWins,
+    IReadOnlyList<CompareSuggestionDto> Fastest,
+    IReadOnlyList<CompareSuggestionDto> MostRaces);
+
 public interface IDriverStatsService
 {
     Task<DriverProfileStatsDto?> GetAsync(Guid driverId, CancellationToken ct = default);
     Task<HeadToHeadDto?> HeadToHeadAsync(Guid driverId, Guid otherId, CancellationToken ct = default);
+    /// <summary>Os dois numa pista e classe (classe: hyper | lmp2 | lmp3 | gt3).</summary>
+    Task<CompareDto?> CompareAsync(Guid driverId, Guid otherId, string track, string carClass, CancellationToken ct = default);
+    Task<CompareSuggestionsDto> SuggestAsync(string track, string carClass, CancellationToken ct = default);
 }

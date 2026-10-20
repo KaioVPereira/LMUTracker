@@ -9,6 +9,7 @@ import { FollowButton } from '../components/FollowButton'
 import { UnlinkSteamButton } from '../components/SteamLink'
 import { TopBar } from '../components/TopBar'
 import { countryName, finishLabel, fmtDateTime, fmtDay, fmtInt, fmtLap, fmtRelative, rankClass } from '../lib/format'
+import { classKey } from '../lib/classes'
 import { useApi } from '../lib/useApi'
 import { Flag } from '../components/Flag'
 import { Badge } from '../components/Badge'
@@ -48,12 +49,15 @@ export function DriverPage() {
             </span>
             <span className="chips">
               {!d.isMe && <FollowButton driverId={d.driverId} />}
+              <Link to={`/pilotos/${d.driverId}/comparar`} className="btn btn-sm">Comparar</Link>
               {d.isMe && <UnlinkSteamButton onDone={() => navigate('/perfil')} />}
             </span>
           </div>
           <RankCard label="Driver Rank" title={d.driverRankTitle} tier={d.driverRankTier} progress={d.driverRankProgress} />
           <RankCard label="Safety Rank" title={d.safetyRankTitle} tier={d.safetyRankTier} progress={d.safetyRankProgress} />
         </header>
+
+        <RecentRaces driverId={d.driverId} page={page} current={d} />
 
         <section aria-label="Resumo" className="tiles tiles-4">
           {s ? (
@@ -100,7 +104,7 @@ export function DriverPage() {
 
         <section aria-labelledby="sec-corridas">
           <div className="sec-h">
-            <h2 id="sec-corridas">Histórico</h2>
+            <h2 id="sec-corridas">Histórico completo</h2>
             <span className="rel">{d.races.total} corrida{d.races.total === 1 ? '' : 's'} desde que o scanner começou a guardar</span>
           </div>
           <div className="tbl-wrap">
@@ -118,7 +122,10 @@ export function DriverPage() {
                   <tr key={r.resultId} className="row-link" onClick={() => navigate(`/resultados/${r.resultId}`)}>
                     <ClassBarCell cls={r.carClass} />
                     <td className="mono">{fmtDateTime(r.startsAt)}</td>
-                    <td><Link to={`/resultados/${r.resultId}`} onClick={(e) => e.stopPropagation()}>{r.title ?? 'Corrida'}</Link></td>
+                    <td>
+                      <Link to={`/resultados/${r.resultId}`} onClick={(e) => e.stopPropagation()}>{r.title ?? 'Corrida'}</Link>
+                      {r.coDrivers?.length ? <span className="tag tag-team" title={`Carro dividido com ${r.coDrivers.join(', ')}`}>equipe</span> : null}
+                    </td>
                     <td>{r.track ?? '—'}</td>
                     <td><TierChip tier={r.tier} /></td>
                     <td className="num">{r.splitNo}</td>
@@ -144,6 +151,49 @@ export function DriverPage() {
         </section>
       </div>
     </>
+  )
+}
+
+/**
+ * As 5 corridas mais recentes, logo no topo do perfil (o histórico completo fica no fim da página). Em outra página do
+ * histórico, busca a primeira só para isto.
+ */
+function RecentRaces({ driverId, page, current }: { driverId: string; page: number; current: DriverProfile }) {
+  const first = useApi<DriverProfile>(page > 1 ? `/lmu/drivers/${encodeURIComponent(driverId)}` : null)
+  const items = (page > 1 ? first.data?.races.items : current.races.items)?.slice(0, 5)
+  if (!items) return null
+  return (
+    <section aria-labelledby="sec-recentes">
+      <div className="sec-h">
+        <h2 id="sec-recentes">Últimas corridas</h2>
+        {current.races.total > 5 && <a href="#sec-corridas" className="sec-link">Histórico completo ↓</a>}
+      </div>
+      {items.length ? (
+        <div className="recent-grid">
+          {items.map((r) => {
+            const fin = r.finishStatus === 'Finished Normally' && r.classPosition
+            const gained = fin && r.classGridPos ? r.classGridPos - r.classPosition! : null
+            return (
+              <Link key={r.resultId} to={`/resultados/${r.resultId}`} className={`recent-card lift cls-${classKey(r.carClass)}`}>
+                <span className="recent-top"><ClassChip cls={r.carClass} /><span className="rel">{fmtRelative(r.startsAt)}</span></span>
+                <b className="recent-title">{r.title ?? 'Corrida'}</b>
+                <span className="rel recent-sub">{r.track ?? '—'} · split {r.splitNo}{r.coDrivers?.length ? ' · equipe' : ''}</span>
+                <span className="recent-pos">
+                  <small>{r.classGridPos ? `P${r.classGridPos}` : '—'}</small>
+                  <span aria-hidden="true">→</span>
+                  <b>{fin ? `P${r.classPosition}` : finishLabel(r.finishStatus)}</b>
+                  {gained !== null && gained !== 0 && <em className={gained > 0 ? 'up' : 'down'}>{gained > 0 ? `▲${gained}` : `▼${-gained}`}</em>}
+                </span>
+                <span className="recent-foot">
+                  <span className="mono">{fmtLap(r.bestLapTime)}</span>
+                  {r.driverRankAdjustment !== null && <span className="recent-dr">DR <Delta value={r.driverRankAdjustment} /></span>}
+                </span>
+              </Link>
+            )
+          })}
+        </div>
+      ) : <p className="note">Nenhuma corrida guardada para este piloto ainda.</p>}
+    </section>
   )
 }
 
@@ -255,7 +305,7 @@ function RivalsSection({ rivals, meId }: { rivals: Rival[]; meId: string }) {
                 <span className="h2h-bar"><i style={{ width: `${pct(r.aheadOfThem, r.aheadOfThem + r.behindThem)}%` }} /></span>
                 <b className={r.behindThem > r.aheadOfThem ? 'down' : ''}>{r.behindThem}</b>
               </span>
-              {r.driverId && <Link to={`/pilotos/${meId}/vs/${r.driverId}`} className="btn btn-sm">Comparar</Link>}
+              {r.driverId && <Link to={`/pilotos/${meId}/comparar?com=${r.driverId}`} className="btn btn-sm">Comparar</Link>}
             </div>
           ))}
         </div>
@@ -289,7 +339,7 @@ function ComparePicker({ meId }: { meId: string }) {
       {shown.length > 0 && (
         <ul className="compare-list">
           {shown.slice(0, 6).map((x) => (
-            <li key={x.id}><button type="button" onClick={() => navigate(`/pilotos/${meId}/vs/${x.id}`)}><b>{x.name}</b><span>{x.sub}</span></button></li>
+            <li key={x.id}><button type="button" onClick={() => navigate(`/pilotos/${meId}/comparar?com=${x.id}`)}><b>{x.name}</b><span>{x.sub}</span></button></li>
           ))}
         </ul>
       )}
