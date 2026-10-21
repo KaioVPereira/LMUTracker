@@ -37,16 +37,18 @@ public sealed class LmuQueryService : ILmuQueryService
         // "Largada" exibida = a oficial do evento (igual ao cronograma do jogo); RaceStartsAt é só o início
         // da sessão de corrida e fica de reserva para eventos antigos, gravados antes desse campo existir.
         // Sessões, clima e regras vêm da configuração guardada pelo scanner (poucos KB por corrida, lidos aqui).
-        var upcoming = (await _db.ScanEvents
-                .Where(e => e.RaceEndsAt > now)
-                .OrderBy(e => e.EventStartsAt ?? e.RaceStartsAt)
-                .Take(12)
-                .Select(e => new
-                {
-                    e.EventId, e.Title, e.Track, e.Tier, e.EventType, Starts = e.EventStartsAt ?? e.RaceStartsAt,
-                    e.RaceEndsAt, e.ConfigData,
-                })
-                .ToListAsync(ct))
+        // Ao vivo e futuras em consultas separadas: num único Take(12) as ao vivo (corridas longas, eventos
+        // especiais, várias instâncias simultâneas) ocupavam todas as vagas e "Próximas largadas" ficava vazia.
+        var current = _db.ScanEvents
+            .Where(e => e.RaceEndsAt > now)
+            .Select(e => new
+            {
+                e.EventId, e.Title, e.Track, e.Tier, e.EventType, Starts = e.EventStartsAt ?? e.RaceStartsAt,
+                e.RaceEndsAt, e.ConfigData,
+            });
+        var live = await current.Where(e => e.Starts <= now).OrderBy(e => e.Starts).Take(30).ToListAsync(ct);
+        var next = await current.Where(e => e.Starts > now).OrderBy(e => e.Starts).Take(12).ToListAsync(ct);
+        var upcoming = live.Concat(next)
             .Select(e => new UpcomingRaceDto(e.EventId, e.Title, e.Track, e.Tier, e.EventType, e.Starts, e.RaceEndsAt,
                 EventConfigReader.Read(e.ConfigData)))
             .ToList();
