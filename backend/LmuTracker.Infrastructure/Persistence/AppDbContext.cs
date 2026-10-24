@@ -51,6 +51,7 @@ public class AppDbContext : DbContext
             e.Property(x => x.EventType).HasMaxLength(32);
             e.Property(x => x.Tier).HasMaxLength(32);
             e.Property(x => x.Classes).HasMaxLength(64);
+            e.Property(x => x.LiveData).HasMaxLength(Scanning.LiveSnapshot.MaxLength);
             e.HasMany(x => x.Splits).WithOne(s => s.ScanEvent)
                 .HasForeignKey(s => s.ScanEventId).OnDelete(DeleteBehavior.Cascade);
         });
@@ -139,6 +140,7 @@ public class AppDbContext : DbContext
         b.Entity<Driver>(e =>
         {
             e.HasIndex(x => x.SteamId).IsUnique();
+            e.HasIndex(x => x.Name); // página ao vivo: liga inscritos (só vêm com o nome) aos perfis
             e.Property(x => x.SteamId).HasMaxLength(20);
             e.Property(x => x.Name).HasMaxLength(96);
         });

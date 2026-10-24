@@ -3,7 +3,8 @@ namespace LmuTracker.Application.Lmu;
 // Busca global (paleta Ctrl+K). Pilotos pelo id interno, nunca pelo SteamID.
 
 public record SearchDriverDto(
-    Guid DriverId, string Name, string? Nationality, string? DriverRankTitle, int? DriverRankTier, int Races);
+    Guid DriverId, string Name, string? Nationality, string? DriverRankTitle, int? DriverRankTier, int Races,
+    LiveSpotDto? LiveNow = null);
 
 public record SearchTrackDto(string Track, int Races);
 

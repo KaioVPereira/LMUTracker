@@ -66,6 +66,21 @@ public class ChangelogController(AppDbContext db) : ApiControllerBase
             "Este mural: sempre que o Pitwall ganhar algo novo, ele aparece no seu próximo acesso. E a página Novidades " +
             "(no menu) guarda tudo o que já foi lançado.",
             "feature", "/novidades", new DateTime(2026, 10, 20, 12, 20, 0, DateTimeKind.Utc)),
+
+        new("live-events",
+            "Corridas ao vivo: quem está inscrito",
+            "Toque numa corrida em andamento (no destaque do início ou em \"Também ao vivo\") para abrir a página do evento: " +
+            "quantos inscritos e splits, a divisão por classe e a lista de todo mundo — piloto ou equipe com os pilotos, " +
+            "país, carro, pintura e o DR/SR atual. Dá para procurar alguém e filtrar por classe, e quem tem perfil no Pitwall " +
+            "vem com link. Posições e tempos o RaceOS só publica no fim: aí a página avisa e leva ao resultado completo.",
+            "feature", "/", new DateTime(2026, 10, 24, 17, 0, 0, DateTimeKind.Utc)),
+
+        new("driver-live-now",
+            "Correndo agora",
+            "Quando um piloto está inscrito numa corrida em andamento, o perfil dele mostra \"Correndo agora\" com a corrida " +
+            "(e a equipe, nas de endurance), e um toque leva direto à página do evento já com ele procurado. Também aparece " +
+            "nos cards de quem você segue, no início, e na busca.",
+            "feature", "/", new DateTime(2026, 10, 24, 17, 5, 0, DateTimeKind.Utc)),
     ];
 
     /// <summary>Todas as novidades, da mais recente para a mais antiga. Público.</summary>

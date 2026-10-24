@@ -71,7 +71,8 @@ function toItems(r: SearchResults, query: string): Item[] {
   const all = [
     ...r.drivers.map((d): Item => ({
       id: `d:${d.driverId}`, kind: 'driver', label: d.name, href: `/pilotos/${d.driverId}`,
-      sub: [d.nationality && countryName(d.nationality), `${fmtInt(d.races)} corrida${d.races === 1 ? '' : 's'}`].filter(Boolean).join(' · '),
+      sub: [d.liveNow && `● correndo agora: ${d.liveNow.title ?? 'corrida'}`, d.nationality && countryName(d.nationality),
+        `${fmtInt(d.races)} corrida${d.races === 1 ? '' : 's'}`].filter(Boolean).join(' · '),
       rank: d.driverRankTitle ? `${d.driverRankTitle}${d.driverRankTier !== null ? ` ${d.driverRankTier}` : ''}` : null,
     })),
     ...r.tracks.map((t): Item => ({

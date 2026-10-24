@@ -83,6 +83,25 @@ public class ScanEvent : Entity
     /// </summary>
     public byte[]? ConfigData { get; set; }
 
+    /// <summary>
+    /// Último retrato do evento em andamento (event/overview): status, splits, inscritos por classe, tamanho dos splits.
+    /// JSON pequeno, só números (ver Scanning/LiveSnapshot). Relido enquanto o evento acontece.
+    /// </summary>
+    public string? LiveData { get; set; }
+
+    /// <summary>Quando o retrato ao vivo foi relido pela última vez (também nas tentativas que falharam).</summary>
+    public DateTime? LiveCheckedAt { get; set; }
+
+    /// <summary>
+    /// Detalhe do evento em andamento, JSON comprimido: o event/overview sem dados sensíveis (host, senha, token, chat,
+    /// avatar) — inclui os pilotos de cada split — e, quando os splits vêm sem pilotos, a lista de inscritos de
+    /// event/entries. É o que a página "ao vivo" lê (ver Scanning/LiveDetail).
+    /// </summary>
+    public byte[]? LiveDetail { get; set; }
+
+    /// <summary>Quando a lista de inscritos (event/entries) foi baixada (é paginada e cara: no máximo a cada 30 min).</summary>
+    public DateTime? LiveEntriesAt { get; set; }
+
     public DateTime FirstSeenAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<RaceSplit> Splits { get; set; } = new List<RaceSplit>();

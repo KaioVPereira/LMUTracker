@@ -23,6 +23,43 @@ if (args.Contains("seed-dev"))
     return;
 }
 
+// Retrato ao vivo FICTÍCIO num evento real da agenda (só em desenvolvimento): seed-live <eventId>.
+if (args.Contains("seed-live"))
+{
+    if (!builder.Environment.IsDevelopment())
+    {
+        Console.Error.WriteLine("seed-live só roda em Development.");
+        return;
+    }
+    var idx = Array.IndexOf(args, "seed-live");
+    using var hostLive = builder.Build();
+    using var scopeLive = hostLive.Services.CreateScope();
+    await DevSeed.LiveAsync(scopeLive.ServiceProvider.GetRequiredService<AppDbContext>(),
+        idx + 1 < args.Length ? args[idx + 1] : null);
+    return;
+}
+
+// Uma passada só do retrato ao vivo (event/overview + inscritos de todos os eventos em andamento, sem esperar os
+// intervalos), sem descobrir nem baixar resultados.
+if (args.Contains("live-once"))
+{
+    using var hostOnce = builder.Build();
+    using var scopeOnce = hostOnce.Services.CreateScope();
+    var n = await scopeOnce.ServiceProvider.GetRequiredService<LmuTracker.Infrastructure.Scanning.ScannerService>()
+        .RefreshLiveAsync(CancellationToken.None, force: true);
+    Console.WriteLine($"{n} retratos ao vivo gravados.");
+    return;
+}
+
+// Confere a previsão de split contra os resultados reais (só taxas de acerto, nenhum nome).
+if (args.Contains("check-splits"))
+{
+    using var hostCheck = builder.Build();
+    using var scopeCheck = hostCheck.Services.CreateScope();
+    await SplitCheck.RunAsync(scopeCheck.ServiceProvider.GetRequiredService<AppDbContext>());
+    return;
+}
+
 // Bootstrap único do login Steam da conta de serviço: gera e guarda o refresh token, depois sai.
 if (args.Contains("steam-login"))
 {

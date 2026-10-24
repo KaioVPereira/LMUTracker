@@ -116,6 +116,8 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Name");
+
                     b.HasIndex("SteamId")
                         .IsUnique();
 
@@ -423,6 +425,19 @@ namespace LmuTracker.Infrastructure.Persistence.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<DateTime>("FirstSeenAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("LiveCheckedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("LiveData")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<byte[]>("LiveDetail")
+                        .HasColumnType("varbinary(max)");
+
+                    b.Property<DateTime?>("LiveEntriesAt")
                         .HasColumnType("datetime2");
 
                     b.Property<DateTime>("RaceEndsAt")

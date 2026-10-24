@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using LmuTracker.Domain.Entities;
 using LmuTracker.Infrastructure.Persistence;
 using LmuTracker.Infrastructure.RaceOs;
@@ -61,6 +62,7 @@ public sealed class ScannerService
     public async Task RunOnceAsync(CancellationToken ct)
     {
         await DiscoverAsync(ct);
+        await RefreshLiveAsync(ct);
         await FetchDueAsync(ct);
         await BackfillIncidentsAsync(ct);
         await BackfillCrewAsync(ct);
@@ -331,6 +333,140 @@ public sealed class ScannerService
                 total += m.Groups[2].Value switch { "h" => v * 60, "m" => v, _ => v / 60.0 };
             }
         return total + 5;
+    }
+
+    // ---------- 1b) Ao vivo: retrato do evento em andamento ----------
+
+    // O RaceOS não publica a cronometragem durante a corrida; o que ele diz é o estado do evento (status, splits
+    // abertos, inscritos por classe). Relido a cada 10 min do começo (com folga antes, para os inscritos) até o fim.
+    private static readonly TimeSpan LiveEvery = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan LiveLead = TimeSpan.FromMinutes(30);
+    private const int LivePerPass = 15;
+
+    /// <param name="force">Relê agora todos os eventos da janela, sem esperar os intervalos (comando live-once).</param>
+    public async Task<int> RefreshLiveAsync(CancellationToken ct, bool force = false)
+    {
+        var now = DateTime.UtcNow;
+        var startsBefore = now + LiveLead;
+        var staleBefore = force ? now : now - LiveEvery;
+        var due = await _db.ScanEvents
+            .Where(e => e.Status == ScanEventStatus.Pending && e.RaceEndsAt > now
+                        && (e.EventStartsAt ?? e.RaceStartsAt) <= startsBefore
+                        && (e.LiveCheckedAt == null || e.LiveCheckedAt < staleBefore))
+            .OrderBy(e => e.LiveCheckedAt)
+            .Take(LivePerPass)
+            .ToListAsync(ct);
+
+        var ok = 0;
+        foreach (var e in due)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                if (await RefreshLiveEventAsync(e, now, force, ct)) ok++;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _log.LogWarning("Scanner: retrato ao vivo de {Event} falhou: {Reason}", e.EventId, ex.Message);
+            }
+            e.LiveCheckedAt = now; // também na falha: tenta de novo só no próximo intervalo
+        }
+        if (due.Count > 0)
+        {
+            await _db.SaveChangesAsync(ct);
+            _log.LogInformation("Scanner: retrato ao vivo de {Ok}/{Count} eventos em andamento.", ok, due.Count);
+        }
+        return ok;
+    }
+
+    private static readonly TimeSpan EntriesEvery = TimeSpan.FromMinutes(30);
+    private const int EntriesPageSize = 40;  // o mesmo do jogo
+    private const int EntriesMaxPages = 60;  // ~2.400 inscritos
+
+    /// <summary>
+    /// Overview → retrato (números) + detalhe (overview sem dados sensíveis). Quando os splits ainda não têm pilotos
+    /// (antes da largada, ou se o RaceOS não mandar), a lista vem de event/entries, relida no máximo a cada 30 min.
+    /// </summary>
+    private async Task<bool> RefreshLiveEventAsync(ScanEvent e, DateTime now, bool force, CancellationToken ct)
+    {
+        var (type, overview) = await LiveOverviewAsync(e, ct);
+        var snapshot = LiveSnapshot.FromOverview(overview);
+        if (snapshot is null) return false;
+        // Os splits acabaram de se formar (0 → N): relê a lista na hora, para ela ser a da divisão.
+        var formed = LiveSnapshot.SplitsOf(e.LiveData) == 0 && LiveSnapshot.SplitsOf(snapshot) > 0;
+        e.LiveData = snapshot;
+
+        JsonArray? entries = null;
+        DateTime? entriesAt = null;
+        if (!LiveDetail.SplitsHaveDrivers(overview))
+        {
+            if (force || formed || e.LiveEntriesAt is null || e.LiveEntriesAt < now - EntriesEvery)
+            {
+                try
+                {
+                    entries = await LiveEntriesAsync(type, e.EventId, ct);
+                    entriesAt = now;
+                    e.LiveEntriesAt = now;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _log.LogWarning("Scanner: inscritos de {Event} falharam (fica a lista anterior): {Reason}", e.EventId, ex.Message);
+                }
+            }
+            if (entries is null)
+            {
+                entries = LiveDetail.StoredEntries(e.LiveDetail);
+                entriesAt = e.LiveEntriesAt;
+            }
+        }
+        e.LiveDetail = LiveDetail.Encode(LiveDetail.Clean(overview), entries, entriesAt) ?? e.LiveDetail;
+        return true;
+    }
+
+    /// <summary>
+    /// Overview cru e o eventType que respondeu. Semanais/especiais: os dois tipos respondem, mas só um traz os
+    /// inscritos (visto ao vivo nas 24h de Le Mans: "special" volta com 0 inscritos) — fica o mais completo.
+    /// </summary>
+    private async Task<(string Type, JsonElement Overview)> LiveOverviewAsync(ScanEvent e, CancellationToken ct)
+    {
+        var types = e.EventType is "weekly" or "special" ? new[] { e.EventType, "specialevent" } : new[] { e.EventType };
+        Exception? last = null;
+        (string Type, JsonElement Overview, int Score)? best = null;
+        foreach (var type in types)
+        {
+            try
+            {
+                var o = await _raceos.GetOverviewRawAsync(type, e.EventId, ct);
+                if (LiveSnapshot.FromOverview(o) is null) continue;
+                var score = Count(o, "totalSplits")
+                            + (o.TryGetProperty("registered", out var r) && r.ValueKind == JsonValueKind.Object ? Count(r, "total") : 0);
+                if (best is null || score > best.Value.Score) best = (type, o, score);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException) { last = ex; }
+        }
+        if (best is { } b) return (b.Type, b.Overview);
+        throw last ?? new InvalidOperationException("event/overview sem dados");
+
+        static int Count(JsonElement x, string name) =>
+            x.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out var n) ? n : 0;
+    }
+
+    /// <summary>Lista de inscritos (event/entries), paginada como o jogo faz, sem os dados sensíveis.</summary>
+    private async Task<JsonArray> LiveEntriesAsync(string type, string eventId, CancellationToken ct)
+    {
+        var all = new List<JsonElement>();
+        for (var page = 1; page <= EntriesMaxPages; page++)
+        {
+            var raw = await _raceos.GetRawAsync(
+                $"/api/v1/event/entries/{Uri.EscapeDataString(type)}/{Uri.EscapeDataString(eventId)}?page={page}&take={EntriesPageSize}", ct);
+            var list = raw.ValueKind == JsonValueKind.Array ? raw
+                : raw.ValueKind == JsonValueKind.Object && raw.TryGetProperty("data", out var d) && d.ValueKind == JsonValueKind.Array ? d
+                : default;
+            if (list.ValueKind != JsonValueKind.Array) break;
+            all.AddRange(list.EnumerateArray().Select(x => x.Clone()));
+            if (list.GetArrayLength() < EntriesPageSize) break;
+        }
+        return LiveDetail.CleanEntries(all);
     }
 
     // ---------- 2) Expansão: baixar resultados das que terminaram ----------

@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using LmuTracker.Application.Lmu;
 using LmuTracker.Domain.Entities;
 using LmuTracker.Infrastructure.Persistence;
@@ -14,6 +16,83 @@ public static class DevSeed
 {
     private const string SeedSeries = "dev-seed";
     private const string FakeSteamPrefix = "7656119900000";
+
+    /// <summary>
+    /// Retrato ao vivo FICTÍCIO: monta um event/overview no formato do jogo (com nomes e host/senha de mentira, para
+    /// conferir que não são guardados) e passa pelo mesmo leitor do scanner. Sem eventId = todos os em andamento.
+    /// </summary>
+    public static async Task LiveAsync(AppDbContext db, string? eventId)
+    {
+        var now = DateTime.UtcNow;
+        var events = await db.ScanEvents
+            .Where(e => eventId != null ? e.EventId == eventId
+                : e.Status == ScanEventStatus.Pending && e.RaceEndsAt > now && (e.EventStartsAt ?? e.RaceStartsAt) <= now)
+            .ToListAsync();
+        foreach (var e in events)
+        {
+            var rnd = new Random(e.EventId.GetHashCode());
+            var size = e.EventType == "special" ? 62 : 30;
+            var total = e.EventType == "special" ? 1400 + rnd.Next(400) : 60 + rnd.Next(400);
+            var hyper = (int)(total * 0.34); var lmp2 = (int)(total * 0.21); var gt3 = total - hyper - lmp2;
+            var count = (int)Math.Ceiling(total / (double)size);
+            var splits = new JsonArray();
+            var servers = new JsonArray();
+            var nations = new[] { "BR", "FR", "DE", "IT", "GB", "ES", "PT", "US", "NL", "BE", "PL", "JP" };
+            var cars = new Dictionary<string, string[]>
+            {
+                ["Hyper"] = new[] { "Ferrari 499P", "Toyota GR010 Hybrid", "Porsche 963", "Cadillac V-Series.R", "Peugeot 9X8" },
+                ["LMP2_ELMS"] = new[] { "Oreca 07" },
+                ["LMGT3"] = new[] { "Porsche 911 GT3 R LMGT3", "BMW M4 LMGT3", "Ferrari 296 LMGT3", "McLaren 720S LMGT3" },
+            };
+            var g = 0;
+            for (var s = 0; s < count; s++)
+            {
+                var drivers = new JsonArray();
+                for (var d = 0; d < Math.Min(size, total - s * size); d++, g++)
+                {
+                    // Nomes inventados; os 40 primeiros batem com os pilotos do seed-dev (se ele tiver rodado).
+                    var cls = (g % 100) < 34 ? "Hyper" : (g % 100) < 55 ? "LMP2_ELMS" : "LMGT3";
+                    drivers.Add(new JsonObject
+                    {
+                        ["driver"] = new JsonObject
+                        {
+                            ["name"] = g < 40 ? $"Piloto Exemplo {g + 1:D2}" : $"Piloto Fictício {g + 1}",
+                            ["nationality"] = nations[g % nations.Length],
+                            ["avatar"] = "https://exemplo.invalid/avatar.png",
+                        },
+                        ["class"] = cls,
+                        ["car"] = new JsonObject { ["name"] = cars[cls][g % cars[cls].Length] },
+                        ["carNumber"] = (g % 99 + 1).ToString(),
+                    });
+                }
+                splits.Add(new JsonObject { ["splitNo"] = s + 1, ["drivers"] = drivers });
+                servers.Add(new JsonObject { ["host"] = "0.0.0.0", ["port"] = 64290, ["password"] = "falsa", ["status"] = "Running" });
+            }
+            var overview = new JsonObject
+            {
+                ["id"] = e.EventId, ["status"] = "Running", ["totalSplits"] = count, ["eventFull"] = false,
+                ["lastUpdatesAt"] = now.AddMinutes(-3).ToString("O"),
+                ["registered"] = new JsonObject
+                {
+                    ["total"] = total,
+                    ["class"] = new JsonObject { ["Hyper"] = hyper, ["LMP2_ELMS"] = lmp2, ["LMGT3"] = gt3 },
+                },
+                ["splits"] = splits, ["servers"] = servers,
+            };
+            var raw = JsonSerializer.SerializeToElement(overview);
+            e.LiveData = LiveSnapshot.FromOverview(raw);
+            e.LiveDetail = LiveDetail.Encode(LiveDetail.Clean(raw), null, null);
+            e.LiveCheckedAt = now.AddMinutes(-2);
+            Console.WriteLine($"{e.Title}: {e.LiveData}");
+            var (src, _, list) = LiveDetail.Read(e.LiveDetail);
+            using var stored = JsonBlob.Decode(e.LiveDetail);
+            var text = stored?.RootElement.GetRawText() ?? "";
+            var leaked = text.Contains("falsa") || text.Contains("0.0.0.0") || text.Contains("avatar");
+            Console.WriteLine($"  detalhe: {src}, {list.Count} pilotos; host/senha/avatar guardados: {(leaked ? "SIM (erro)" : "não")}");
+        }
+        await db.SaveChangesAsync();
+        Console.WriteLine($"{events.Count} eventos com retrato fictício.");
+    }
 
     public static async Task RunAsync(AppDbContext db)
     {

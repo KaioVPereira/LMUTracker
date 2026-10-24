@@ -13,6 +13,7 @@ import { LoginPage } from './pages/LoginPage'
 import { MyProfilePage } from './pages/MyProfilePage'
 import { MyTicketsPage } from './pages/MyTicketsPage'
 import { AdminTicketsPage } from './pages/AdminTicketsPage'
+import { LivePage } from './pages/LivePage'
 import { RacePage } from './pages/RacePage'
 import { RacesPage } from './pages/RacesPage'
 import { RankingsPage } from './pages/RankingsPage'
@@ -31,6 +32,7 @@ export default function App() {
       <Route path="/" element={<DashboardPage />} />
       <Route path="/corridas" element={<RacesPage />} />
       <Route path="/corridas/:eventId" element={<RacePage />} />
+      <Route path="/ao-vivo/:eventId" element={<LivePage />} />
       <Route path="/resultados/:resultId" element={<ResultPage />} />
       <Route path="/rankings" element={<RankingsPage />} />
       <Route path="/pistas/:track" element={<TrackPage />} />

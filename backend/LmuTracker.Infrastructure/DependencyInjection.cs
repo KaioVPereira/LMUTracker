@@ -32,6 +32,7 @@ public static class DependencyInjection
         services.AddScoped<IDriverStatsService, DriverStatsService>();
         services.AddScoped<IExtrasService, ExtrasService>();
         services.AddScoped<IRankingsService, RankingsService>();
+        services.AddScoped<ILiveRosterService, LiveRosterService>();
 
         // ---- Vínculo Steam (OpenID) ----
         services.Configure<SiteOptions>(config.GetSection(SiteOptions.Section));

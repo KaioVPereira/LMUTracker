@@ -81,4 +81,5 @@ public record DriverProfileDto(
     Guid DriverId, string Name, string? Nationality, string? Badge,
     string? DriverRankTitle, int? DriverRankTier, int? DriverRankProgress,
     string? SafetyRankTitle, int? SafetyRankTier, int? SafetyRankProgress,
-    DateTime LastSeenAt, bool IsMe, DriverStatsDto Stats, PagedDto<DriverRaceDto> Races, bool IsFollowed = false);
+    DateTime LastSeenAt, bool IsMe, DriverStatsDto Stats, PagedDto<DriverRaceDto> Races, bool IsFollowed = false,
+    LiveSpotDto? LiveNow = null);

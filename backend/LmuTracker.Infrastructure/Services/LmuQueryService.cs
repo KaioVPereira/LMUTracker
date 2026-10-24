@@ -44,13 +44,13 @@ public sealed class LmuQueryService : ILmuQueryService
             .Select(e => new
             {
                 e.EventId, e.Title, e.Track, e.Tier, e.EventType, Starts = e.EventStartsAt ?? e.RaceStartsAt,
-                e.RaceEndsAt, e.ConfigData,
+                e.RaceEndsAt, e.ConfigData, e.LiveData, e.LiveCheckedAt,
             });
         var live = await current.Where(e => e.Starts <= now).OrderBy(e => e.Starts).Take(30).ToListAsync(ct);
         var next = await current.Where(e => e.Starts > now).OrderBy(e => e.Starts).Take(12).ToListAsync(ct);
         var upcoming = live.Concat(next)
             .Select(e => new UpcomingRaceDto(e.EventId, e.Title, e.Track, e.Tier, e.EventType, e.Starts, e.RaceEndsAt,
-                EventConfigReader.Read(e.ConfigData)))
+                EventConfigReader.Read(e.ConfigData), LiveSnapshot.Read(e.LiveData, e.LiveCheckedAt)))
             .ToList();
 
         var recent = await _db.ScanEvents
@@ -66,6 +66,65 @@ public sealed class LmuQueryService : ILmuQueryService
 
         return new OverviewDto(eventsTracked, racesFetched, resultsStored, driversIndexed,
             lastActivity, upcoming, recent);
+    }
+
+    public async Task<LiveEventDto?> GetLiveAsync(string eventId, CancellationToken ct = default)
+    {
+        var e = await _db.ScanEvents.AsNoTracking()
+            .Where(x => x.EventId == eventId)
+            .Select(x => new
+            {
+                x.EventId, x.Title, x.Track, x.Tier, x.EventType, Starts = x.EventStartsAt ?? x.RaceStartsAt,
+                x.RaceEndsAt, x.ConfigData, x.LiveData, x.LiveCheckedAt, x.LiveDetail, x.LiveEntriesAt,
+                HasResult = x.Splits.Any(),
+            })
+            .FirstOrDefaultAsync(ct);
+        if (e is null) return null;
+
+        var race = new UpcomingRaceDto(e.EventId, e.Title, e.Track, e.Tier, e.EventType, e.Starts, e.RaceEndsAt,
+            EventConfigReader.Read(e.ConfigData), LiveSnapshot.Read(e.LiveData, e.LiveCheckedAt));
+        var (source, teamEvent, entries) = LiveDetail.Read(e.LiveDetail);
+
+        // Ligação com o índice de pilotos: pelo SteamID quando vier; senão pelo nome, só se for único no índice.
+        var steamIds = entries.Select(x => x.SteamId).OfType<string>().Distinct().ToList();
+        var bySteam = new Dictionary<string, Driver>();
+        foreach (var chunk in steamIds.Chunk(500))
+            foreach (var d in await _db.Drivers.AsNoTracking().Where(d => chunk.Contains(d.SteamId)).ToListAsync(ct))
+                bySteam[d.SteamId] = d;
+        // Em evento de equipe o nome da inscrição é o da equipe: quem se liga a perfis são os pilotos dela.
+        var names = entries.Where(x => !teamEvent && (x.SteamId is null || !bySteam.ContainsKey(x.SteamId)))
+            .Select(x => x.Name)
+            .Concat(entries.SelectMany(x => x.Members))
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var byName = new Dictionary<string, Driver>(StringComparer.OrdinalIgnoreCase);
+        foreach (var chunk in names.Chunk(500))
+        {
+            var found = await _db.Drivers.AsNoTracking().Where(d => chunk.Contains(d.Name)).ToListAsync(ct);
+            foreach (var g in found.GroupBy(d => d.Name, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() == 1))
+                byName[g.Key] = g.First();
+        }
+
+        var splits = entries
+            .GroupBy(x => x.SplitNo)
+            .OrderBy(g => g.Key ?? int.MaxValue)
+            .Select(g => new LiveSplitDto(g.Key, g.Select(x =>
+            {
+                var d = x.SteamId is not null && bySteam.TryGetValue(x.SteamId, out var s) ? s
+                    : teamEvent ? null : byName.GetValueOrDefault(x.Name);
+                var members = x.Members.Select(m => byName.GetValueOrDefault(m) is { } md
+                    ? new LiveMemberDto(m, md.Id, md.DriverRankTitle, md.DriverRankTier)
+                    : new LiveMemberDto(m, null, null, null)).ToList();
+                var ownRank = x.DrRank is not null || x.SrRank is not null; // o rank atual do RaceOS vale mais que o do índice
+                return new LiveEntryDto(x.Name, x.Nationality ?? d?.Nationality, x.CarClass, x.Car, x.CarNumber, x.Team,
+                    members, d?.Id,
+                    ownRank ? x.DrRank : d?.DriverRankTitle, ownRank ? x.DrTier : d?.DriverRankTier,
+                    ownRank ? x.SrRank : d?.SafetyRankTitle, ownRank ? x.SrTier : d?.SafetyRankTier,
+                    x.Livery, x.Badge ?? d?.Badge);
+            }).ToList()))
+            .ToList();
+
+        return new LiveEventDto(race, e.HasResult, source, source == "entries" ? e.LiveEntriesAt : e.LiveCheckedAt, splits,
+            teamEvent);
     }
 
     public async Task<MyDriverDto> GetMyDriverAsync(Guid userId, CancellationToken ct = default)

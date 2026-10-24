@@ -37,7 +37,8 @@ public record LastRaceDto(
 
 public record FollowedDriverDto(
     Guid DriverId, string Name, string? Nationality, string? DriverRankTitle, int? DriverRankTier,
-    string? SafetyRankTitle, int? SafetyRankTier, DateTime FollowedAt, int RacesLast7Days, LastRaceDto? LastRace);
+    string? SafetyRankTitle, int? SafetyRankTier, DateTime FollowedAt, int RacesLast7Days, LastRaceDto? LastRace,
+    LiveSpotDto? LiveNow = null);
 
 public interface IExtrasService
 {

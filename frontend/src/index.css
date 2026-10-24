@@ -265,6 +265,51 @@ section { display: flex; flex-direction: column; gap: 14px; }
 .ph span { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; line-height: 1.2; white-space: nowrap; }
 .ph span small { font-family: var(--m); font-size: 11px; color: var(--faint); }
 .ph.is-on span { color: var(--fg); font-weight: 600; }
+/* Estado do evento no RaceOS (inscritos, splits, classes): faixa inteira no pé do destaque. */
+.hero-live { position: relative; flex: 1 1 100%; display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 0.8fr); gap: 24px; align-items: start; padding-top: 20px; border-top: 1px solid var(--line); }
+.hl-nums { display: flex; gap: 22px; }
+.hl-nums div { display: flex; flex-direction: column; gap: 2px; }
+.hl-nums b { font-family: var(--d); font-size: 30px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.hl-nums span, .hl-lab { font-size: 12px; color: var(--muted); }
+.hl-nums b small { font-family: var(--m); font-size: 16px; font-weight: 600; color: var(--muted); margin-left: 2px; }
+.hl-block { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.hl-classes { display: flex; height: 10px; border-radius: 5px; overflow: hidden; gap: 2px; }
+.hl-classes i { display: block; height: 100%; background: var(--cc, var(--muted)); }
+.hl-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--soft); }
+.hl-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.hl-legend span::before { content: ''; width: 8px; height: 8px; border-radius: 2px; background: var(--cc, var(--muted)); }
+.hl-legend b { font-family: var(--m); font-weight: 600; color: var(--fg); }
+.hl-splits { display: flex; align-items: flex-end; gap: 2px; height: 28px; }
+.hl-splits i { flex: 1 1 0; max-width: 14px; min-height: 2px; border-radius: 2px 2px 0 0; background: rgba(200, 240, 49, 0.6); }
+.hl-foot { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--faint); }
+.hl-foot .ok { color: var(--soft); }
+/* "Correndo agora" no perfil do piloto */
+.live-now { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 14px 18px; border-radius: var(--r-lg); border: 1px solid rgba(255, 90, 95, 0.35); background: linear-gradient(120deg, rgba(255, 90, 95, 0.12), transparent 60%), var(--s1); color: var(--fg); text-decoration: none; }
+.live-now:hover { color: var(--fg); border-color: rgba(255, 90, 95, 0.6); }
+.live-now-main { display: flex; flex-direction: column; min-width: 0; flex: 1 1 220px; }
+.live-now-main b { font-weight: 600; }
+.live-now-main span { font-size: 13px; color: var(--muted); }
+.live-now-go { font-weight: 600; color: var(--live); white-space: nowrap; }
+.live-card .live-nums { font-size: 13px; color: var(--soft); }
+.live-card .live-nums b { font-family: var(--m); color: var(--fg); }
+.live-card.lift:hover { border-color: rgba(255, 90, 95, 0.6); }
+/* Página do evento ao vivo */
+.live-search { flex: 1 1 280px; max-width: 420px; }
+.live-search input { width: 100%; }
+.live-sum b { font-family: var(--m); color: var(--fg); font-weight: 600; }
+.live-sum span { color: var(--cc, var(--muted)); }
+.results .sub-line { display: block; font-size: 12px; color: var(--muted); font-weight: 400; }
+.live-list { display: none; list-style: none; margin: 0; padding: 0; flex-direction: column; gap: 8px; }
+.live-item { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line); border-left: 3px solid var(--cc, var(--line)); background: var(--s1); min-width: 0; }
+.live-item.is-followed { background: rgba(200, 240, 49, 0.07); }
+.live-item .li-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.live-item .li-name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.live-item .li-num { color: var(--muted); font-size: 13px; margin-right: 8px; }
+.live-item .sub-line { display: block; font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+.live-item .li-car { font-size: 13.5px; }
+.live-item .li-ranks { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--muted); }
+.live-item .li-ranks b { color: var(--fg); }
+.live-list .empty { list-style: none; }
 
 /* ---------- piloto ---------- */
 .driver { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 12px; }
@@ -745,6 +790,15 @@ td.car { color: var(--muted); max-width: 240px; overflow: hidden; text-overflow:
   .hero-facts dd { font-size: 14px; }
   .hero-facts .fact-end { display: none; }
   .hero-facts > div:nth-last-child(2):nth-child(3n + 1) { grid-column: span 2; }
+  .hero-live { grid-template-columns: minmax(0, 1fr); gap: 16px; padding-top: 16px; }
+  .hl-nums { justify-content: space-between; }
+  .hl-nums b { font-size: 26px; }
+  .live-splits { flex-wrap: nowrap; overflow-x: auto; margin-right: -16px; padding-right: 16px; padding-bottom: 4px; scrollbar-width: none; }
+  .live-splits .chip { flex: 0 0 auto; }
+  .live-table { display: none; }
+  .live-list { display: flex; }
+  .hero .live-extra { display: none; }
+  .hero-main { min-width: 0; }
   .acct-menu { right: -4px; }
   .grid-cards > :nth-child(n + 5) { display: none; }
   .live-strip { grid-auto-columns: 78%; margin-right: -16px; padding-right: 16px; }

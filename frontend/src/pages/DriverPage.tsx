@@ -6,6 +6,7 @@ import { ClassBarCell, ClassChip, Delta, EmptyState, ErrorBox, Loading, Progress
 import { Pager } from '../components/Pager'
 import { ActivityHeatmap, RankChart } from '../components/ProfileCharts'
 import { FollowButton } from '../components/FollowButton'
+import { LiveNowCard } from '../components/LiveEvent'
 import { UnlinkSteamButton } from '../components/SteamLink'
 import { TopBar } from '../components/TopBar'
 import { countryName, finishLabel, fmtDateTime, fmtDay, fmtInt, fmtLap, fmtRelative, rankClass } from '../lib/format'
@@ -56,6 +57,8 @@ export function DriverPage() {
           <RankCard label="Driver Rank" title={d.driverRankTitle} tier={d.driverRankTier} progress={d.driverRankProgress} />
           <RankCard label="Safety Rank" title={d.safetyRankTitle} tier={d.safetyRankTier} progress={d.safetyRankProgress} />
         </header>
+
+        {d.liveNow && <LiveNowCard spot={d.liveNow} name={d.name} />}
 
         <RecentRaces driverId={d.driverId} page={page} current={d} />
 

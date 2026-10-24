@@ -1,35 +1,23 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { api, ApiError } from '../api/client'
-import type { EventInfo, FollowedDriver, Home, Overview, UpcomingRace } from '../api/types'
+import type { FollowedDriver, Home, Overview } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
 import { ClassChips, CountUp, EmptyState, ErrorBox, RowsSkeleton, Skeleton, TierChip } from '../components/Bits'
 import { Carousel, Highlights, HomeEmpty, RecordCard, WinnerCard } from '../components/HomeSections'
+import { Hero, LiveCard } from '../components/LiveEvent'
 import { TopBar } from '../components/TopBar'
-import { currentPhase, fmtGameTime, isWet, phasesOf, raceSession, sessionsSummary, skyLabel } from '../lib/eventPhase'
-import { fmtClock, fmtDateTime, fmtInt, fmtRelative, fmtTime, parseUtc, typeLabel } from '../lib/format'
+import { sessionsSummary } from '../lib/eventPhase'
+import { fmtDateTime, fmtInt, fmtRelative, fmtTime, parseUtc } from '../lib/format'
+import { conditions, isLive, liveHref, useNow } from '../lib/live'
 
 // "Ao vivo" = a agenda e o estado das corridas, relidos a cada 30 s (o scanner atualiza a cada 2 min). Os destaques
 // vêm de um cache de 60 s no servidor, então relemos a cada minuto. Da corrida em si o RaceOS não publica a
 // cronometragem de terceiros: o que mostramos ao vivo é a fase (treino, classificação, corrida) e as condições.
 const REFRESH_MS = 30_000
 const HOME_REFRESH_MS = 60_000
-const CLOCK_MS = 30_000
 const UPCOMING_SHOWN = 8
 const AUTOPLAY_MS = 4_500
-
-/** Relógio de estado: "Ao vivo" e "em X min" mudam com ele, não a cada render. */
-function useNow(every = CLOCK_MS): number {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), every)
-    return () => window.clearInterval(id)
-  }, [every])
-  return now
-}
-
-const isLive = (r: UpcomingRace, now: number) =>
-  parseUtc(r.startsAt).getTime() <= now && now < parseUtc(r.endsAt).getTime()
 
 export function DashboardPage() {
   const { user } = useAuth()
@@ -104,7 +92,7 @@ export function DashboardPage() {
         {overviewError && <ErrorBox message={overviewError} onRetry={loadOverview} />}
 
         {!overview && !overviewError ? <HeroSkeleton /> : heroRace
-          ? <Hero race={heroRace} live={live.includes(heroRace)} liveCount={live.length} />
+          ? <Hero race={heroRace} live={live.includes(heroRace)} liveCount={live.length} to={`/ao-vivo/${heroRace.eventId}`} />
           : (
             <EmptyState title="Nenhuma corrida na agenda agora">
               O scanner confere a agenda do RaceOS a cada 2 minutos — as próximas largadas aparecem aqui sozinhas.
@@ -227,13 +215,18 @@ function FollowingSection({ list, now }: { list: FollowedDriver[]; now: number }
         {list.slice(0, 8).map((f) => {
           const l = f.lastRace
           const fresh = l && now - parseUtc(l.startsAt).getTime() < RECENT
+          const live = f.liveNow
           return (
-            <Link key={f.driverId} to={l ? `/resultados/${l.resultId}` : `/pilotos/${f.driverId}`} className={`race-card lift follow-card${fresh ? ' is-fresh' : ''}`}>
+            <Link key={f.driverId} to={live ? liveHref(live, f.name) : l ? `/resultados/${l.resultId}` : `/pilotos/${f.driverId}`}
+              className={`race-card lift follow-card${fresh || live ? ' is-fresh' : ''}`}>
               <span className="top">
                 <b className="follow-name">{f.name}</b>
-                {fresh ? <span className="live-soft">acabou de correr</span> : <span className="rel">{l ? fmtRelative(l.startsAt, now) : 'sem corridas'}</span>}
+                {live ? <span className="live">Correndo agora</span>
+                  : fresh ? <span className="live-soft">acabou de correr</span> : <span className="rel">{l ? fmtRelative(l.startsAt, now) : 'sem corridas'}</span>}
               </span>
-              {l ? (
+              {live ? (
+                <span className="meta">{live.title ?? 'Corrida'} · {live.track ?? '—'}{live.team ? ` · equipe ${live.team}` : ''}</span>
+              ) : l ? (
                 <>
                   <span className="follow-pos">{l.finishStatus === 'Finished Normally' && l.classPosition ? `P${l.classPosition}` : (l.finishStatus === 'DNF' ? 'Abandonou' : '—')}<ClassChips classes={l.carClass} /></span>
                   <span className="meta">{l.title ?? 'Corrida'} · {l.track ?? '—'} · split {l.splitNo}</span>
@@ -245,99 +238,6 @@ function FollowingSection({ list, now }: { list: FollowedDriver[]; now: number }
         })}
       </div>
     </section>
-  )
-}
-
-/** "15:00 no jogo · 25 °C · céu limpo" — condições da largada da corrida. */
-function conditions(info: EventInfo | null): string | null {
-  const s = raceSession(info)
-  if (!s) return null
-  const parts = [`${fmtGameTime(s.timeOfDay)} no jogo`]
-  if (s.temperatureC !== null) parts.push(`${s.temperatureC} °C`)
-  if (s.rainChance) parts.push(`chuva ${s.rainChance}%`)
-  else if (isWet(s.sky)) parts.push(skyLabel(s.sky)!.toLowerCase())
-  return parts.join(' · ')
-}
-
-/** Linha do tempo das sessões, com a atual destacada e o progresso dela. */
-function Phases({ race, now }: { race: UpcomingRace; now: number }) {
-  const phases = phasesOf(race)
-  if (!phases.length) return null
-  const cur = currentPhase(phases, now)
-  const total = phases[phases.length - 1].end - phases[0].start
-  return (
-    <ol className="phases" aria-label="Sessões do evento">
-      {phases.map((p, i) => {
-        const done = i < cur
-        const on = i === cur
-        const pct = on ? Math.min(100, ((now - p.start) / (p.end - p.start)) * 100) : done ? 100 : 0
-        return (
-          <li key={p.kind + i} className={`ph${on ? ' is-on' : ''}${done ? ' is-done' : ''}`}
-            style={{ flexGrow: Math.max(1, (p.end - p.start) / total * 10) }} aria-current={on ? 'step' : undefined}>
-            <i><b style={{ width: `${pct}%` }} /></i>
-            <span>{p.label}<small>{Math.round(p.minutes)} min</small></span>
-          </li>
-        )
-      })}
-    </ol>
-  )
-}
-
-/**
- * Corrida em destaque. Ao vivo: a fase atual e quanto falta para a próxima; antes: contagem até a largada.
- * Sem botão de "acompanhar" — o RaceOS não publica a cronometragem durante a corrida.
- */
-function Hero({ race, live, liveCount }: { race: UpcomingRace; live: boolean; liveCount: number }) {
-  const now = useNow(1000)
-  const phases = phasesOf(race)
-  const cur = currentPhase(phases, now)
-  const phase = cur >= 0 && cur < phases.length ? phases[cur] : null
-  const nextPhase = phases[cur + 1]
-  const s = raceSession(race.info)
-
-  let clock: { value: number; label: string }
-  if (!live) clock = { value: parseUtc(race.startsAt).getTime() - now, label: 'para a largada' }
-  else if (phase && phase.kind !== 'race' && nextPhase) clock = { value: nextPhase.start - now, label: `para ${nextPhase.kind === 'race' ? 'a largada da corrida' : nextPhase.label.toLowerCase()}` }
-  else clock = { value: parseUtc(race.endsAt).getTime() - now, label: 'para a bandeira' }
-
-  return (
-    <article className={`hero${live ? '' : ' is-next'}`} aria-labelledby="hero-title">
-      <div className="hero-main">
-        {live
-          ? <span className="live">Ao vivo{phase ? ` · ${phase.label}` : ''}{liveCount > 1 ? ` · ${liveCount} corridas` : ''}</span>
-          : <span className="next-tag">Próxima largada</span>}
-        <h1 id="hero-title" className="hero-title">{race.title ?? 'Corrida diária'}</h1>
-        <p className="hero-sub">{race.track ?? '—'} · {typeLabel(race.eventType)} · começa {fmtTime(race.startsAt)}</p>
-        <div className="hero-clock" aria-live="off"><b>{fmtClock(clock.value)}</b>{clock.label}</div>
-        <Phases race={race} now={now} />
-      </div>
-      <div className="hero-side">
-      <dl className="hero-facts">
-        <div><dt>Nível</dt><dd><TierChip tier={race.tier} /></dd></div>
-        {s && <div><dt>Hora no jogo</dt><dd className="mono">{fmtGameTime(s.timeOfDay)}</dd></div>}
-        {s?.temperatureC !== null && s?.temperatureC !== undefined && <div><dt>Temperatura</dt><dd>{s.temperatureC} °C</dd></div>}
-        {s && <div><dt>Céu</dt><dd>{skyLabel(s.sky) ?? '—'}{s.rainChance ? ` · chuva ${s.rainChance}%` : ''}</dd></div>}
-        {race.info?.fixedSetup !== null && race.info?.fixedSetup !== undefined && <div><dt>Setup</dt><dd>{race.info.fixedSetup ? 'Fixo' : 'Livre'}</dd></div>}
-        {race.info?.maxPlayers && <div><dt>Grid por split</dt><dd className="mono">até {race.info.maxPlayers}</dd></div>}
-        <div className="fact-end"><dt>Termina</dt><dd className="mono">~{fmtTime(race.endsAt)}</dd></div>
-      </dl>
-      </div>
-    </article>
-  )
-}
-
-/** Card de uma corrida acontecendo agora (sem link: ainda não há resultado para mostrar). */
-function LiveCard({ race, now }: { race: UpcomingRace; now: number }) {
-  const phases = phasesOf(race)
-  const cur = currentPhase(phases, now)
-  const phase = cur >= 0 && cur < phases.length ? phases[cur] : null
-  return (
-    <div className="car-card live-card">
-      <span className="live">Ao vivo{phase ? ` · ${phase.label}` : ''}</span>
-      <b>{race.title ?? 'Corrida diária'}</b>
-      <span className="meta">{race.track ?? '—'} · até {fmtTime(race.endsAt)}</span>
-      <span className="chips"><TierChip tier={race.tier} />{conditions(race.info) && <span className="rel">{conditions(race.info)}</span>}</span>
-    </div>
   )
 }
 

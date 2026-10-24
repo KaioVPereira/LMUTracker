@@ -63,6 +63,21 @@ export interface UpcomingRace {
   endsAt: string
   /** Só para corridas vistas na agenda a partir do scanner v3. */
   info: EventInfo | null
+  /** Estado do evento segundo o RaceOS (relido a cada ~10 min enquanto acontece). Sem posições. */
+  live?: LiveStatus | null
+}
+
+export interface LiveStatus {
+  status: string | null
+  splits: number | null
+  registered: number | null
+  byClass: { class: string; count: number }[]
+  splitSizes: number[]
+  servers: number | null
+  serversRunning: number | null
+  full: boolean | null
+  lastUpdatesAt: string | null
+  checkedAt: string
 }
 
 export interface RecentRace {
@@ -304,6 +319,18 @@ export interface DriverProfile {
   stats: DriverStats
   races: Paged<DriverRace>
   isFollowed: boolean
+  /** Corrida em andamento em que o piloto está inscrito. */
+  liveNow?: LiveSpot | null
+}
+
+/** "Correndo agora": corrida em andamento em que o piloto está inscrito (team = equipe, em evento de equipe). */
+export interface LiveSpot {
+  eventId: string
+  title: string | null
+  track: string | null
+  team: string | null
+  startsAt: string
+  endsAt: string
 }
 
 // ---------- busca global ----------
@@ -315,6 +342,7 @@ export interface SearchDriver {
   driverRankTitle: string | null
   driverRankTier: number | null
   races: number
+  liveNow?: LiveSpot | null
 }
 
 export interface SearchTrack { track: string; races: number }
@@ -754,6 +782,7 @@ export interface FollowedDriver {
   followedAt: string
   racesLast7Days: number
   lastRace: LastRace | null
+  liveNow?: LiveSpot | null
 }
 
 // ---------- Chamados (bugs e sugestões) ----------
@@ -854,4 +883,48 @@ export interface CarRanking {
 export interface Country {
   code: string
   drivers: number
+}
+
+/** Inscrito no evento em andamento. driverId e ranks vêm do índice do Pitwall (quando o piloto já é conhecido). */
+export interface LiveEntry {
+  name: string
+  nationality: string | null
+  carClass: string | null
+  car: string | null
+  carNumber: string | null
+  team: string | null
+  /** Pilotos da equipe (evento de equipe) ou co-pilotos. */
+  members: LiveMember[]
+  driverId: string | null
+  driverRankTitle: string | null
+  driverRankTier: number | null
+  safetyRankTitle: string | null
+  safetyRankTier: number | null
+  /** Pintura escolhida ("Team WRT 2026 #69"). */
+  livery: string | null
+  badge: string | null
+}
+
+export interface LiveMember {
+  name: string
+  driverId: string | null
+  driverRankTitle: string | null
+  driverRankTier: number | null
+}
+
+export interface LiveSplit {
+  /** null = inscrição ainda sem split definido. */
+  splitNo: number | null
+  entries: LiveEntry[]
+}
+
+export interface LiveEvent {
+  race: UpcomingRace
+  hasResult: boolean
+  /** "splits" = pilotos já distribuídos; "entries" = lista de inscritos; null = ainda sem lista. */
+  entriesSource: 'splits' | 'entries' | null
+  entriesAt: string | null
+  splits: LiveSplit[]
+  /** Cada inscrição é uma equipe (nome da equipe + pilotos), como nas 24h de Le Mans. */
+  teamEvent: boolean
 }

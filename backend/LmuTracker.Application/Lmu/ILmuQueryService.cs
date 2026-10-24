@@ -3,6 +3,9 @@ namespace LmuTracker.Application.Lmu;
 public interface ILmuQueryService
 {
     Task<OverviewDto> GetOverviewAsync(CancellationToken ct = default);
+
+    /// <summary>Evento em andamento (ou prestes a começar): estado no RaceOS e pilotos por split. Null se não existir.</summary>
+    Task<LiveEventDto?> GetLiveAsync(string eventId, CancellationToken ct = default);
     Task<MyDriverDto> GetMyDriverAsync(Guid userId, CancellationToken ct = default);
 
     /// <summary>

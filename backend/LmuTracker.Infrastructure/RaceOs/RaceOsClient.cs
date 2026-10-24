@@ -157,6 +157,21 @@ public sealed class RaceOsClient
     }
 
     /// <summary>
+    /// event/overview cru, para o retrato ao vivo (status, inscritos, splits, servidores — ver Scanning/LiveSnapshot).
+    /// Falha HTTP vira exceção.
+    /// </summary>
+    public async Task<JsonElement> GetOverviewRawAsync(string eventType, string eventId, CancellationToken ct)
+    {
+        using var resp = await SendAsync(HttpMethod.Post, "/api/v1/event/overview",
+            new { game = "lmu", eventType, eventId }, ct);
+        if (!resp.IsSuccessStatusCode)
+            throw new InvalidOperationException($"event/overview {eventId} => HTTP {(int)resp.StatusCode}");
+        var bytes = await resp.Content.ReadAsByteArrayAsync(ct);
+        using var doc = JsonDocument.Parse(bytes);
+        return doc.RootElement.Clone();
+    }
+
+    /// <summary>
     /// Resultado de um split. Null SÓ em 404 (resultado ainda não publicado / split inexistente); qualquer
     /// outra falha HTTP vira exceção, para não ser confundida com "acabaram os splits".
     /// </summary>

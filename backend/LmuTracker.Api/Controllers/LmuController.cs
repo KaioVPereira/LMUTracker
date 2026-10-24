@@ -18,11 +18,13 @@ public class LmuController : ApiControllerBase
     private readonly IDriverStatsService _stats;
     private readonly IExtrasService _extras;
     private readonly IRankingsService _rankings;
+    private readonly ILiveRosterService _roster;
 
     public LmuController(ILmuQueryService lmu, ISearchService search, IHomeService home, IDriverStatsService stats,
-        IExtrasService extras, IRankingsService rankings)
+        IExtrasService extras, IRankingsService rankings, ILiveRosterService roster)
     {
         _rankings = rankings;
+        _roster = roster;
         _lmu = lmu;
         _search = search;
         _home = home;
@@ -85,7 +87,11 @@ public class LmuController : ApiControllerBase
     [Authorize]
     [HttpGet("follows")]
     public async Task<ActionResult<IReadOnlyList<FollowedDriverDto>>> Follows(CancellationToken ct)
-        => Ok(await _extras.FollowsAsync(UserId, ct));
+    {
+        var live = await _roster.AllAsync(ct);
+        return Ok((await _extras.FollowsAsync(UserId, ct))
+            .Select(f => live.TryGetValue(f.DriverId, out var spot) ? f with { LiveNow = spot } : f).ToList());
+    }
 
     [Authorize]
     [HttpGet("follows/ids")]
@@ -149,13 +155,37 @@ public class LmuController : ApiControllerBase
     [HttpGet("search")]
     [OutputCache(Duration = 30)]
     public async Task<ActionResult<SearchResultsDto>> Search([FromQuery] string? q, CancellationToken ct)
-        => Ok(await _search.SearchAsync(q, ct));
+    {
+        var found = await _search.SearchAsync(q, ct);
+        var live = await _roster.AllAsync(ct);
+        return Ok(found with
+        {
+            Drivers = found.Drivers.Select(d => live.TryGetValue(d.DriverId, out var spot) ? d with { LiveNow = spot } : d).ToList(),
+        });
+    }
 
     /// <summary>Informações gerais do LMU para o dashboard (agenda e o que o scanner já juntou).</summary>
     [HttpGet("overview")]
     [OutputCache(Duration = 30)]
     public async Task<ActionResult<OverviewDto>> Overview(CancellationToken ct)
         => Ok(await _lmu.GetOverviewAsync(ct));
+
+    /// <summary>"Correndo agora" de uma lista de pilotos (ids separados por vírgula, até 200): só os que estão numa corrida.</summary>
+    [HttpGet("live/drivers")]
+    [OutputCache(Duration = 30, VaryByQueryKeys = new[] { "ids" })]
+    public async Task<ActionResult<IReadOnlyDictionary<Guid, LiveSpotDto>>> LiveDrivers([FromQuery] string? ids, CancellationToken ct)
+    {
+        var live = await _roster.AllAsync(ct);
+        var wanted = (ids ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries).Take(200)
+            .Select(x => Guid.TryParse(x, out var g) ? g : Guid.Empty).Where(g => g != Guid.Empty);
+        return Ok(wanted.Distinct().Where(live.ContainsKey).ToDictionary(g => g, g => live[g]));
+    }
+
+    /// <summary>Evento em andamento: estado no RaceOS e pilotos por split (relidos pelo scanner a cada ~10 min).</summary>
+    [HttpGet("live/{eventId}")]
+    [OutputCache(Duration = 30)]
+    public async Task<ActionResult<LiveEventDto>> Live(string eventId, CancellationToken ct)
+        => await _lmu.GetLiveAsync(eventId, ct) is { } live ? Ok(live) : NotFound();
 
     /// <summary>Painel do piloto vinculado (só dados do próprio usuário).</summary>
     [Authorize]
@@ -207,5 +237,7 @@ public class LmuController : ApiControllerBase
     [HttpGet("drivers/{driverId:guid}")]
     public async Task<ActionResult<DriverProfileDto>> Driver(
         Guid driverId, [FromQuery] int page = 1, CancellationToken ct = default)
-        => await _lmu.GetDriverAsync(driverId, UserId, page, ct) is { } driver ? Ok(driver) : NotFound();
+        => await _lmu.GetDriverAsync(driverId, UserId, page, ct) is { } driver
+            ? Ok(driver with { LiveNow = await _roster.ForDriverAsync(driverId, ct) })
+            : NotFound();
 }
