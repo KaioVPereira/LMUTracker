@@ -430,7 +430,15 @@ public sealed class LmuQueryService : ILmuQueryService
             r.Crew.OrderBy(c => c.Seq).Select(c => new CrewStintDto(c.StartLap, c.EndLap, c.Name,
                 _db.Drivers.Where(x => x.SteamId == c.SteamId).Select(x => (Guid?)x.Id).FirstOrDefault())).ToList());
 
-    /// <summary>Corridas do piloto: as dele e as de carros divididos em que ele guiou algum turno.</summary>
-    internal static IQueryable<RaceResult> RacesOf(AppDbContext db, string steamId) =>
-        db.RaceResults.Where(r => r.SteamId == steamId || r.Crew.Any(c => c.SteamId == steamId));
+    /// <summary>
+    /// Corridas do piloto: as dele e as de carros divididos em que ele guiou algum turno.
+    /// Ids por UNION ALL (busca nos dois índices de SteamId): o "SteamId = x OR EXISTS(turno)" fazia o SQL varrer
+    /// RaceResults inteira — perfis de 6 a 30+ s em prod.
+    /// </summary>
+    internal static IQueryable<RaceResult> RacesOf(AppDbContext db, string steamId)
+    {
+        var ids = db.RaceResults.Where(r => r.SteamId == steamId).Select(r => r.Id)
+            .Concat(db.RaceCrewStints.Where(c => c.SteamId == steamId).Select(c => c.RaceResultId));
+        return db.RaceResults.Where(r => ids.Contains(r.Id));
+    }
 }
