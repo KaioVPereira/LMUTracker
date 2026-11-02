@@ -1,5 +1,10 @@
 # LMUTracker
 
+> **ENCERRADO em 2026-11-02.** A RaceControl (RaceOS) bloqueou o IP do servidor (403 em tudo, até no endpoint
+> público). O site e o app (1.0.5) mostram só a página de encerramento (`frontend/src/pages/ClosedPage.tsx`); a Api
+> responde 410 em `/api/*`, exceto o aviso/download do APK. Scanner e banco saíram de produção; backup local em
+> `F:\LMUTracker-backup\2026-11-02` (fora do repositório). O código completo de antes está no commit 8a357e7.
+
 Portal de estatísticas de **Le Mans Ultimate** (parecido com o racecenter.fr): login próprio e vínculo
 opcional da conta Steam. Os dados de corrida vêm de um **scanner** que varre a agenda do RaceOS
 (`raceos.gg`, backend oficial da Motorsport Games) e guarda os resultados.

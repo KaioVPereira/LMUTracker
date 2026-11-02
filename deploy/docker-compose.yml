@@ -1,11 +1,6 @@
 name: lmutracker
 
-# Deploy do LMUTracker: o scanner (worker) e o site (lmutracker-api = Api + front).
-# Segredos ficam no .env ao lado (NUNCA versionado). Veja .env.example.
-#
-# BANCO: reusa o SQL Server que JÁ roda para o GameTracker (o VPS é de 4GB; um segundo SQL Server
-# estouraria a RAM). Os serviços entram na rede do GameTracker e falam com o `db` por dentro dela, num
-# banco separado `LmuTracker` — que o worker cria/migra no start (EF MigrateAsync).
+# Deploy do LMUTracker: só o site (lmutracker-api), em modo encerrado — sem banco nem segredos.
 #
 # NOMES NA REDE COMPARTILHADA: cada serviço vira um nome de DNS na rede do GameTracker. NUNCA chame um
 # serviço daqui de `api`, `web` ou `db` — o Caddy do GameTracker resolveria `api` também para o nosso
@@ -14,28 +9,12 @@ name: lmutracker
 # A rede externa abaixo é a do compose do GameTracker (name: gametracker -> rede gametracker_default).
 
 services:
-  worker:
-    build:
-      context: ../backend
-      dockerfile: Dockerfile.worker
-    environment:
-      DOTNET_ENVIRONMENT: Production
-      ConnectionStrings__Default: ${LMU_DB}
-      RaceOs__TicketProvider: steamkit
-      RaceOs__SteamKit__Username: ${STEAM_USERNAME}
-      RaceOs__SteamKit__SessionStorePath: /data/steam-session.json
-      Scanner__IntervalSeconds: "120"
-      AppReleases__Directory: /app/data/apk   # comando publish-release (App Android)
-    env_file: .env
-    volumes:
-      - steam-session:/data   # refresh token da conta de serviço (gerado pelo bootstrap steam-login)
-      - /root/lmutracker-data/apk:/app/data/apk:ro   # o publish-release confere se o APK existe
-    networks:
-      - gametracker
-    restart: unless-stopped
-
-  # Site: Api + front na porta 8080, sem porta publicada. Quem expõe é o Caddy do GameTracker, pelo bloco
-  # lmutracker.{$DOMAIN} -> lmutracker-api:8080 (mesmo padrão do financas/deuquanto).
+  # SITE ENCERRADO (2026-11-02): a RaceControl bloqueou o IP do servidor. O scanner (worker) saiu e o banco
+  # LmuTracker foi apagado do SQL do GameTracker (backup local). Sobrou só o site, que serve a página de encerramento
+  # e o aviso de versão nova do app Android (APK em /root/lmutracker-data/apk). O deploy usa --remove-orphans para
+  # tirar o contêiner antigo do worker.
+  #
+  # Exposto pelo Caddy do GameTracker, bloco lmutracker.{$DOMAIN} -> lmutracker-api:8080.
   lmutracker-api:
     build:
       context: ..
@@ -43,14 +22,8 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__Default: ${LMU_DB}
-      Jwt__SecretFile: /data/jwt.key        # gerado na 1ª subida e guardado no volume
-      Site__BaseUrl: https://lmutracker.gamestrackers.com
-      Tickets__UploadsPath: /data/uploads   # prints dos chamados (no volume, sobrevive ao deploy)
-      # APKs do app Android. A versão liberada fica no banco (AppReleases); ver README → App Android.
       AppReleases__Directory: /app/data/apk
     volumes:
-      - api-data:/data
       # Fora da pasta do repositório: o deploy faz `git reset --hard` lá.
       - /root/lmutracker-data/apk:/app/data/apk:ro
     networks:
@@ -62,6 +35,3 @@ networks:
     external: true
     name: gametracker_default
 
-volumes:
-  steam-session:
-  api-data:

@@ -29,5 +29,5 @@ jobs:
             git fetch --all
             git reset --hard origin/main
             cd deploy
-            docker compose up -d --build
+            docker compose up -d --build --remove-orphans
             docker image prune -f
